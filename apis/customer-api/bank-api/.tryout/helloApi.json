@@ -1,0 +1,36 @@
+{
+  "type": "API",
+  "requests": [],
+  "/deposit": {
+    "requests": [
+      {
+        "name": "sample1",
+        "contentType": "application/json",
+        "content": {
+          "currency": "EUR",
+          "amount": 100
+        },
+        "queryParams": {},
+        "pathParams": {}
+      }
+    ],
+    "defaultRequest": "sample1"
+  },
+  "/loan-review": {
+    "requests": [
+      {
+        "name": "sample",
+        "contentType": "application/json",
+        "content": {
+          "customerId": "C567",
+          "name": "Jane Smith",
+          "email": "jane.smith@example.com",
+          "amount": 25000
+        },
+        "queryParams": {},
+        "pathParams": {}
+      }
+    ],
+    "defaultRequest": "sample"
+  }
+}

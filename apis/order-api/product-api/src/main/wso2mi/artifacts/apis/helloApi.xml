@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<api context="/helloapi" name="helloApi" xmlns="http://ws.apache.org/ns/synapse">
+    <resource methods="GET" uri-template="/">
+        <inSequence>
+            <payloadFactory media-type="json" template-type="default">
+
+                <format>{ "greetings":"Welcome to O2 Bank !!" } </format>
+            </payloadFactory>
+            <respond description="bank api" />
+        </inSequence>
+        <faultSequence>
+        </faultSequence>
+    </resource>
+    <resource methods="POST" uri-template="/deposit">
+        <inSequence>
+            <http.post configKey="CurrencyConverter">
+                <relativePath>/currency/rate</relativePath>
+                <headers>[]</headers>
+                <requestBodyType>JSON</requestBodyType>
+                <requestBodyJson>'{
+    "fromCurrency": "${payload.currency}",
+    "toCurrency": "USD"
+}'</requestBodyJson>
+                <forceScAccepted>false</forceScAccepted>
+                <disableChunking>false</disableChunking>
+                <forceHttp10>false</forceHttp10>
+                <noKeepAlive>false</noKeepAlive>
+                <forcePostPutNobody>false</forcePostPutNobody>
+                <responseVariable>http_post_1</responseVariable>
+                <overwriteBody>false</overwriteBody>
+            </http.post>
+
+
+            <filter xpath="${vars.http_post_1.attributes.statusCode == 200}">
+                <then>
+                    <payloadFactory media-type="json" template-type="default">
+
+                        <format>{ "status": "successful", "amountDeposited": ${payload.amount *
+                            vars.http_post_1.payload.rate} } </format>
+                    </payloadFactory>
+                </then>
+                <else>
+                    <payloadFactory media-type="json" template-type="default">
+
+                        <format>{ "status": "unsuccessful", "error":
+                            "${vars.http_post_1.payload.message}" }</format>
+                    </payloadFactory>
+                </else>
+            </filter>
+            <respond description="Bank API" />
+        </inSequence>
+        <faultSequence>
+        </faultSequence>
+    </resource>
+    <resource methods="POST" uri-template="/loan-review">
+        <inSequence>
+            <email.send configKey="test">
+                <from>test</from>
+                <personalName></personalName>
+                <to>test</to>
+                <cc></cc>
+                <bcc></bcc>
+                <replyTo></replyTo>
+                <subject></subject>
+                <content>test</content>
+                <contentType>text/html</contentType>
+                <encoding>UTF-8</encoding>
+                <attachments></attachments>
+                <inlineImages>[]</inlineImages>
+                <contentTransferEncoding>Base64</contentTransferEncoding>
+                <responseVariable>email_send_1</responseVariable>
+                <overwriteBody>false</overwriteBody>
+            </email.send>
+            <payloadFactory media-type="json" template-type="default">
+
+                <format>{mesage:"test"}</format>
+            </payloadFactory>
+            <respond />
+        </inSequence>
+        <faultSequence>
+        </faultSequence>
+    </resource>
+</api>

@@ -1,0 +1,101 @@
+
+pipeline {
+    agent none
+
+    options {
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+        timestamps()
+    }
+
+    environment {
+        REGISTRY           = 'docker.io/YOUR_DOCKERHUB_ORG'   // TODO: set your registry namespace
+        REGISTRY_CRED_ID   = 'dockerhub-token'                // Jenkins credential ID
+        BUILD_AGENT_LABEL  = 'linux-build'                    // any Linux agent with JDK/Maven/Docker
+        DEPLOY_AGENT_LABEL = 'wso2-target-server'              // the agent that IS the target server
+    }
+
+    stages {
+        stage('Pipeline') {
+            agent { label env.BUILD_AGENT_LABEL }
+            steps {
+                script {
+                    checkout scm
+                    sh "git config user.name 'jenkins'"
+                    sh "git config user.email 'jenkins@ci.local'"
+
+                    env.IS_RELEASE = (env.BRANCH_NAME == 'main' && env.CHANGE_ID == null) ? 'true' : 'false'
+
+                    def diffRange = env.CHANGE_ID
+                        ? "origin/${env.CHANGE_TARGET}...HEAD"
+                        : (env.GIT_PREVIOUS_SUCCESSFUL_COMMIT ? "${env.GIT_PREVIOUS_SUCCESSFUL_COMMIT}..HEAD" : 'HEAD')
+
+                    def detect = load 'jenkins/lib/detectChangedApis.groovy'
+                    def apis = detect(diffRange)
+
+                    if (apis.isEmpty()) {
+                        echo "No API changes detected in range: ${diffRange}"
+                        return
+                    }
+                    echo "Changed APIs: ${apis.collect { it.slug }.join(', ')}"
+
+                    def branchesMap = [:]
+                    apis.each { api ->
+                        branchesMap["${api.slug}"] = {
+                            stage("Build: ${api.slug}") {
+                                def build = load 'jenkins/lib/buildAndPackage.groovy'
+                                def car = build(api.path)
+                                if (env.CHANGE_ID) {
+                                    // PR path: reviewer-facing artifact only, never consumed downstream
+                                    archiveArtifacts artifacts: car, fingerprint: true
+                                }
+                            }
+
+                            if (env.IS_RELEASE != 'true') {
+                                return // PR builds stop after validation
+                            }
+
+                            def versioning = load 'jenkins/lib/versioning.groovy'
+                            def result = versioning.nextVersion(api.slug, api.path)
+                            if (result == null) {
+                                echo "No version bump needed for ${api.slug} — skipping release"
+                                return
+                            }
+
+                            stage("Version & Tag: ${api.slug}") {
+                                versioning.tagAndRelease(result.tag, result.changelog)
+                            }
+
+                            def imageTag
+                            stage("Build & Push Image: ${api.slug}") {
+                                def pushImg = load 'jenkins/lib/buildAndPushImage.groovy'
+                                imageTag = pushImg([
+                                    apiPath              : api.path,
+                                    apiSlug              : api.slug,
+                                    version              : result.version,
+                                    registry             : env.REGISTRY,
+                                    registryCredentialsId: env.REGISTRY_CRED_ID,
+                                ])
+                            }
+
+                            stage("Deploy: ${api.slug}") {
+                                node(env.DEPLOY_AGENT_LABEL) {
+                                    def deploy = load 'jenkins/lib/deploy.groovy'
+                                    deploy([apiSlug: api.slug, imageTag: imageTag])
+                                }
+                            }
+                        }
+                    }
+
+                    parallel branchesMap
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Finished: branch=${env.BRANCH_NAME ?: 'n/a'} release=${env.IS_RELEASE ?: 'n/a'}"
+        }
+    }
+}

@@ -1,0 +1,130 @@
+name: Build, Containerize, and Deploy WSO2 MI API
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    outputs:
+      car_path: ${{ steps.findcar.outputs.car_path }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+
+      - name: Build with Maven
+        run: mvn -B clean install
+
+      - name: Locate CAR file
+        id: findcar
+        run: |
+          echo "car_path=$(find . -name '*.car' | head -n 1)" >> $GITHUB_OUTPUT
+
+      - name: Upload CAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mi-carbon-app
+          path: ${{ steps.findcar.outputs.car_path }}
+
+
+  dockerize:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download CAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: mi-carbon-app
+          path: target/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./deployment/docker/Dockerfile
+          push: true
+          build-args: |
+            BASE_IMAGE=wso2/wso2mi:latest
+            WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/wso2-mi-cicd-project:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/wso2-mi-cicd-project:${{ github.sha }}
+
+
+  deploy:
+    needs: dockerize
+    runs-on: self-hosted
+
+    steps:
+      - name: Validate image reference
+        shell: powershell
+        env:
+          IMAGE_REF: ${{ secrets.DOCKERHUB_USERNAME }}/wso2-mi-cicd-project:${{ github.sha }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:IMAGE_REF)) {
+            throw "Order API workflow received an empty image reference"
+          }
+
+      - name: Pull Docker image
+        shell: powershell
+        env:
+          IMAGE_REF: ${{ secrets.DOCKERHUB_USERNAME }}/wso2-mi-cicd-project:${{ github.sha }}
+        run: |
+          docker pull "$env:IMAGE_REF"
+
+      - name: Stop and remove old WSO2 MI container (if it exists)
+        shell: powershell
+        run: |
+          $existing = docker ps -a --filter "name=^wso2mi$" --format "{{.Names}}"
+          if ($existing -eq "wso2mi") {
+            Write-Host "Existing container found - stopping and removing..."
+            docker stop wso2mi
+            docker rm wso2mi
+          } else {
+            Write-Host "No existing container named wso2mi - nothing to remove."
+          }
+
+      - name: Start new WSO2 MI container
+        shell: powershell
+        env:
+          IMAGE_REF: ${{ secrets.DOCKERHUB_USERNAME }}/wso2-mi-cicd-project:${{ github.sha }}
+        run: |
+          docker run -d --name wso2mi `
+            -p 8290:8290 `
+            -p 8253:8253 `
+            -p 9164:9164 `
+            "$env:IMAGE_REF"
+
+      - name: Verify container is running
+        shell: powershell
+        run: |
+          docker ps

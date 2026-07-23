@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<localEntry key="test" xmlns="http://ws.apache.org/ns/synapse">
+  <email.init>
+    <connectionType>SMTPS</connectionType>
+    <host>test</host>
+    <port>test</port>
+    <username>test</username>
+    <password>test</password>
+    <enableOAuth2>false</enableOAuth2>
+    <grantType/>
+    <requireTLS/>
+    <checkServerIdentity/>
+    <name>test</name>
+  </email.init>
+</localEntry>
