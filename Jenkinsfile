@@ -14,6 +14,7 @@ pipeline {
         DEV_DEPLOY_AGENT_LABEL = 'wso2-dev-server'              
         DEPLOY_AGENT_LABEL     = 'wso2-target-server'          
         SMOKE_BASE_URL         = 'http://localhost:8290'               
+    }
 
     stages {
         stage('Pipeline') {
