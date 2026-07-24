@@ -13,19 +13,25 @@ def nextVersion(String apiSlug, String apiPath) {
     ).trim()
 
     if (!commits) {
-        return null 
+        return null
     }
 
     def parts = current.tokenize('.').collect { it as int }
-    int major = parts[0], minor = parts[1], patch = parts[2]
+    int major = parts[0]
+    int minor = parts[1]
+    int patch = parts[2]
 
     String bump = 'patch'
     StringBuilder changelog = new StringBuilder()
 
     commits.split('\n').each { line ->
         def bits = line.split(/\|/, 2)
-        if (bits.length < 2) return
-        def (msg, sha) = bits
+        if (bits.length < 2) {
+            return
+        }
+
+        def msg = bits[0]
+        def sha = bits[1]
         changelog << "- ${msg} (${sha})\n"
 
         if (msg ==~ /(?i).*BREAKING CHANGE.*/ || msg ==~ /(?i)^[a-z]+(\([^)]*\))?!:.*/) {
@@ -36,9 +42,18 @@ def nextVersion(String apiSlug, String apiPath) {
     }
 
     switch (bump) {
-        case 'major': major += 1; minor = 0; patch = 0; break
-        case 'minor': minor += 1; patch = 0; break
-        case 'patch': patch += 1; break
+        case 'major':
+            major += 1
+            minor = 0
+            patch = 0
+            break
+        case 'minor':
+            minor += 1
+            patch = 0
+            break
+        default:
+            patch += 1
+            break
     }
 
     String newVersion = "${major}.${minor}.${patch}"
@@ -57,13 +72,12 @@ def tagAndRelease(String tag, String changelogBody) {
     ) == 0
 
     if (exists) {
-        echo "Tag ${tag} already exists remotely — reusing it (idempotent re-run)"
+        echo "Tag ${tag} already exists remotely; reusing it for this run"
     } else {
         sh "git tag ${tag}"
         sh "git push origin ${tag}"
     }
 
-  
     def notesFile = "release-notes-${tag}.txt"
     writeFile file: notesFile, text: changelogBody
     archiveArtifacts artifacts: notesFile, fingerprint: true

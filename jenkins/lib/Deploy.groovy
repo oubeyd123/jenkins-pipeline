@@ -1,22 +1,27 @@
 def call(Map cfg) {
+    def containerName = cfg.get('containerName', cfg.apiSlug)
+    def ports = cfg.get('ports', '')
+    def envFile = cfg.get('envFile', '')
+    def healthCommand = cfg.get('healthCommand', "docker ps --filter name=^/${containerName}\$ --filter status=running --format '{{.Names}}' | grep -q '^${containerName}\$'")
+
     sh """
-        set -e
-        docker pull ${cfg.imageTag}
- 
-        if [ \$(docker ps -aq -f name=^${cfg.apiSlug}\$) ]; then
-          echo "Existing container found for ${cfg.apiSlug} — stopping and removing"
-          docker stop ${cfg.apiSlug} || true
-          docker rm ${cfg.apiSlug} || true
+        set -euo pipefail
+
+        docker pull '${cfg.imageTag}'
+
+        if docker ps -aq -f name=^/${containerName}\$ | grep -q .; then
+          echo "Existing container found for ${containerName}; stopping and removing"
+          docker stop '${containerName}' || true
+          docker rm '${containerName}' || true
         else
-          echo "No existing container named ${cfg.apiSlug} — nothing to remove"
+          echo "No existing container named ${containerName}; nothing to remove"
         fi
- 
-        docker run -d --name ${cfg.apiSlug} ${cfg.imageTag}
- 
-        sleep 3
-        docker ps --filter "name=${cfg.apiSlug}" --filter "status=running" --format '{{.Names}}' | grep -q "^${cfg.apiSlug}\$" \
-          || { echo "::error:: ${cfg.apiSlug} container did not stay running"; exit 1; }
+
+        docker run -d --restart unless-stopped --name '${containerName}' ${ports} ${envFile} '${cfg.imageTag}'
+
+        sleep 10
+        ${healthCommand}
     """
 }
- 
+
 return this
