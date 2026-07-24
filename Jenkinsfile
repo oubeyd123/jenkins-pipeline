@@ -10,7 +10,7 @@ pipeline {
     environment {
         REGISTRY               = 'docker.io/oubeyd' 
         REGISTRY_CRED_ID       = 'dockerhub-token'           
-        BUILD_AGENT_LABEL      = 'linux-build'                
+        BUILD_AGENT_LABEL      = ''
         DEV_DEPLOY_AGENT_LABEL = 'wso2-dev-server'              
         DEPLOY_AGENT_LABEL     = 'wso2-target-server'          
         SMOKE_BASE_URL         = 'http://localhost:8290'               
@@ -18,7 +18,7 @@ pipeline {
 
     stages {
         stage('Pipeline') {
-            agent { label env.BUILD_AGENT_LABEL }
+            agent any
             steps {
                 script {
                     checkout scm
