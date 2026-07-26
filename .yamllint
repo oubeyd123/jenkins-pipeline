@@ -1,0 +1,30 @@
+---
+# Project YAML policy:
+# - enforce normal style rules for developer-owned YAML
+# - ignore WSO2 Integration Studio generated YAML that is accepted by MI
+extends: default
+
+ignore: |
+  **/target/**
+  **/build/**
+  apis/*/*/src/main/wso2mi/resources/metadata/*.yaml
+  apis/*/*/src/main/wso2mi/resources/api-definitions/*.yaml
+
+rules:
+  document-start:
+    present: false
+
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+
+  line-length:
+    max: 120
+    level: warning
+
+  new-line-at-end-of-file:
+    level: warning
+
+  truthy:
+    allowed-values: ['true', 'false']
+    check-keys: false
