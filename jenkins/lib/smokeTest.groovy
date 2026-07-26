@@ -13,16 +13,31 @@ def call(Map cfg) {
     }
 
     if (cfg.contexts) {
-        sh """
-            set -euo pipefail
+        if (isUnix()) {
+            sh """
+                set -euo pipefail
 
-            contexts='''${cfg.contexts}'''
-            for context in \$contexts; do
-              url="${cfg.baseUrl}\$context"
-              echo "Smoke testing \$url"
-              curl --fail --silent --show-error --retry 5 --retry-delay 5 "\$url"
-            done
-        """
+                contexts='''${cfg.contexts}'''
+                for context in \$contexts; do
+                  url="${cfg.baseUrl}\$context"
+                  echo "Smoke testing \$url"
+                  curl --fail --silent --show-error --retry 5 --retry-delay 5 "\$url"
+                done
+            """
+        } else {
+            powershell """
+                \$ErrorActionPreference = 'Stop'
+                \$contexts = @'
+${cfg.contexts}
+'@ -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) }
+
+                foreach (\$context in \$contexts) {
+                  \$url = '${cfg.baseUrl}' + \$context
+                  Write-Host "Smoke testing \$url"
+                  curl.exe --fail --silent --show-error --retry 5 --retry-delay 5 "\$url"
+                }
+            """
+        }
         return
     }
 

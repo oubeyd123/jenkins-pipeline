@@ -65,17 +65,22 @@ pipeline {
                                 archiveArtifacts allowEmptyArchive: true, artifacts: "apis/${api.path}/target/*.log"
                                 sh "cp '${car}' target/dev-carbonapps/"
                             }
+                            stash name: 'dev-docker-context', includes: 'Dockerfile.dev,target/dev-carbonapps/*.car'
                         }
 
                         def imageTag
                         stage('Build & Push Dev MI Image') {
                             def buildDevImage = load 'jenkins/lib/BuildDevImage.groovy'
-                            imageTag = buildDevImage([
-                                imageName            : env.DEV_IMAGE_NAME,
-                                version              : "dev-${env.BUILD_NUMBER}",
-                                registry             : env.REGISTRY,
-                                registryCredentialsId: env.REGISTRY_CRED_ID,
-                            ])
+                            node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                deleteDir()
+                                unstash 'dev-docker-context'
+                                imageTag = buildDevImage([
+                                    imageName            : env.DEV_IMAGE_NAME,
+                                    version              : "dev-${env.BUILD_NUMBER}",
+                                    registry             : env.REGISTRY,
+                                    registryCredentialsId: env.REGISTRY_CRED_ID,
+                                ])
+                            }
                         }
 
                         stage('Deploy Dev MI Container') {
@@ -128,11 +133,20 @@ pipeline {
                                 junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
                                 archiveArtifacts artifacts: car, fingerprint: true
                                 archiveArtifacts allowEmptyArchive: true, artifacts: "apis/${api.path}/target/*.log"
+                                stash name: "docker-check-${api.slug}", includes: "apis/${api.path}/deployment/docker/Dockerfile,apis/${api.path}/target/*.car"
                             }
 
                             stage("Docker Build Check: ${api.slug}") {
-                                dir("apis/${api.path}") {
-                                    sh "docker build -f deployment/docker/Dockerfile -t local/${api.slug}:${env.BUILD_NUMBER} ."
+                                node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                    deleteDir()
+                                    unstash "docker-check-${api.slug}"
+                                    dir("apis/${api.path}") {
+                                        powershell """
+                                            \$ErrorActionPreference = 'Stop'
+                                            docker info | Out-Host
+                                            docker build -f deployment/docker/Dockerfile -t local/${api.slug}:${env.BUILD_NUMBER} .
+                                        """
+                                    }
                                 }
                             }
 
