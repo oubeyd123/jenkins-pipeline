@@ -14,6 +14,9 @@ pipeline {
         DEV_DEPLOY_AGENT_LABEL = 'wso2-dev-server'              
         DEPLOY_AGENT_LABEL     = 'wso2-target-server'          
         SMOKE_BASE_URL         = 'http://localhost:8290'               
+        DEV_CONTAINER_NAME     = 'wso2-mi-dev'
+        DEV_CONTAINER_PORTS    = '-p 8290:8290 -p 8253:8253 -p 9164:9164'
+        DEV_IMAGE_NAME         = 'wso2-mi-dev'
     }
 
     stages {
@@ -42,6 +45,74 @@ pipeline {
                     }
 
                     echo "Changed APIs: ${apis.collect { it.slug }.join(', ')}"
+
+                    if (env.IS_DEVELOP == 'true') {
+                        stage('Validate Changed APIs') {
+                            def quality = load 'jenkins/lib/qualityChecks.groovy'
+                            apis.each { api ->
+                                quality(api.path)
+                            }
+                        }
+
+                        stage('Build Changed CARs') {
+                            sh 'rm -rf target/dev-carbonapps && mkdir -p target/dev-carbonapps'
+
+                            def build = load 'jenkins/lib/Buildandpackage.groovy'
+                            apis.each { api ->
+                                def car = build(api.path)
+                                junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
+                                archiveArtifacts artifacts: car, fingerprint: true
+                                archiveArtifacts allowEmptyArchive: true, artifacts: "apis/${api.path}/target/*.log"
+                                sh "cp '${car}' target/dev-carbonapps/"
+                            }
+                        }
+
+                        def imageTag
+                        stage('Build & Push Dev MI Image') {
+                            def buildDevImage = load 'jenkins/lib/BuildDevImage.groovy'
+                            imageTag = buildDevImage([
+                                imageName            : env.DEV_IMAGE_NAME,
+                                version              : "dev-${env.BUILD_NUMBER}",
+                                registry             : env.REGISTRY,
+                                registryCredentialsId: env.REGISTRY_CRED_ID,
+                            ])
+                        }
+
+                        stage('Deploy Dev MI Container') {
+                            def deploy = load 'jenkins/lib/Deploy.groovy'
+                            node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                deploy([
+                                    apiSlug      : env.DEV_CONTAINER_NAME,
+                                    imageTag     : imageTag,
+                                    containerName: env.DEV_CONTAINER_NAME,
+                                    ports        : env.DEV_CONTAINER_PORTS,
+                                ])
+                            }
+                        }
+
+                        stage('Smoke Test Changed APIs') {
+                            def smokeContexts = sh(
+                                script: """
+                                    for api_path in ${apis.collect { "'apis/${it.path}/src/main/wso2mi/artifacts/apis'" }.join(' ')}; do
+                                      find "\$api_path" -name '*.xml' -print0
+                                    done |
+                                      xargs -0 -r sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' |
+                                      sort -u
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            def smoke = load 'jenkins/lib/smokeTest.groovy'
+                            node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                smoke([
+                                    apiSlug : env.DEV_CONTAINER_NAME,
+                                    contexts: smokeContexts,
+                                    baseUrl : env.SMOKE_BASE_URL,
+                                ])
+                            }
+                        }
+
+                        return
+                    }
 
                     def branchesMap = [:]
                     apis.each { api ->
@@ -86,18 +157,34 @@ pipeline {
                                 }
 
                                 stage("Deploy Dev: ${api.slug}") {
+                                    def deploy = load 'jenkins/lib/Deploy.groovy'
                                     node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                        def deploy = load 'jenkins/lib/Deploy.groovy'
-                                        deploy([apiSlug: api.slug, imageTag: imageTag])
+                                        deploy([
+                                            apiSlug      : api.slug,
+                                            imageTag     : imageTag,
+                                            containerName: env.DEV_CONTAINER_NAME,
+                                            ports        : env.DEV_CONTAINER_PORTS,
+                                        ])
                                     }
                                 }
 
                                 stage("Smoke Test Dev: ${api.slug}") {
+                                    def smokeContexts = sh(
+                                        script: """
+                                            find 'apis/${api.path}/src/main/wso2mi/artifacts/apis' -name '*.xml' -print0 |
+                                              xargs -0 -r sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' |
+                                              sort -u
+                                        """,
+                                        returnStdout: true
+                                    ).trim()
                                     def smoke = load 'jenkins/lib/smokeTest.groovy'
-                                    smoke([
-                                        apiSlug: api.slug,
-                                        url    : env.SMOKE_BASE_URL ? "${env.SMOKE_BASE_URL}/${api.slug}" : '',
-                                    ])
+                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                        smoke([
+                                            apiSlug : api.slug,
+                                            contexts: smokeContexts,
+                                            baseUrl : env.SMOKE_BASE_URL,
+                                        ])
+                                    }
                                 }
 
                                 return
@@ -137,18 +224,29 @@ pipeline {
                             }
 
                             stage("Deploy: ${api.slug}") {
+                                def deploy = load 'jenkins/lib/Deploy.groovy'
                                 node(env.DEPLOY_AGENT_LABEL) {
-                                    def deploy = load 'jenkins/lib/Deploy.groovy'
                                     deploy([apiSlug: api.slug, imageTag: imageTag])
                                 }
                             }
 
                             stage("Smoke Test Production: ${api.slug}") {
+                                def smokeContexts = sh(
+                                    script: """
+                                        find 'apis/${api.path}/src/main/wso2mi/artifacts/apis' -name '*.xml' -print0 |
+                                          xargs -0 -r sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' |
+                                          sort -u
+                                    """,
+                                    returnStdout: true
+                                ).trim()
                                 def smoke = load 'jenkins/lib/smokeTest.groovy'
-                                smoke([
-                                    apiSlug: api.slug,
-                                    url    : env.SMOKE_BASE_URL ? "${env.SMOKE_BASE_URL}/${api.slug}" : '',
-                                ])
+                                node(env.DEPLOY_AGENT_LABEL) {
+                                    smoke([
+                                        apiSlug : api.slug,
+                                        contexts: smokeContexts,
+                                        baseUrl : env.SMOKE_BASE_URL,
+                                    ])
+                                }
                             }
                         }
                     }
