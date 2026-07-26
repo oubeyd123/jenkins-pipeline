@@ -12,7 +12,12 @@ def call(String apiPath) {
             fi
 
             if command -v yamllint >/dev/null 2>&1; then
-              find src/main/wso2mi -name '*.yaml' -print0 | xargs -0 -r yamllint
+              find . \( -name '*.yaml' -o -name '*.yml' \) \
+                ! -path './target/*' \
+                ! -path './build/*' \
+                ! -path '*/resources/metadata/*' \
+                ! -path '*/resources/api-definitions/*' \
+                -print0 | xargs -0 -r yamllint -c "${WORKSPACE:-../../..}/.yamllint"
             else
               echo "yamllint not installed; skipping YAML syntax validation"
             fi
