@@ -103,6 +103,81 @@ def tagAndRelease(String tag, String changelogBody, String gitCredentialsId = ''
     def notesFile = "release-notes-${tag}.txt"
     writeFile file: notesFile, text: changelogBody
     archiveArtifacts artifacts: notesFile, fingerprint: true
+
+    if (gitCredentialsId) {
+        createGitHubRelease(tag, changelogBody, gitCredentialsId)
+    } else {
+        echo "No GitHub credential configured; skipping GitHub Release creation for ${tag}"
+    }
+}
+
+def createGitHubRelease(String tag, String changelogBody, String gitCredentialsId) {
+    def remoteUrl = sh(
+        script: "git config --get remote.origin.url",
+        returnStdout: true
+    ).trim()
+
+    def repo = remoteUrl
+        .replaceFirst(/^https:\/\/github.com\//, '')
+        .replaceFirst(/^git@github.com:/, '')
+        .replaceFirst(/\.git$/, '')
+
+    def releasePayload = """{
+  "tag_name": "${jsonEscape(tag)}",
+  "name": "${jsonEscape(tag)}",
+  "body": "${jsonEscape(changelogBody)}",
+  "draft": false,
+  "prerelease": false
+}
+"""
+    def payloadFile = "release-payload-${tag}.json"
+    writeFile file: payloadFile, text: releasePayload
+
+    withCredentials([usernamePassword(
+        credentialsId: gitCredentialsId,
+        usernameVariable: 'GIT_USER',
+        passwordVariable: 'GIT_TOKEN'
+    )]) {
+        sh """
+            set -euo pipefail
+
+            release_url="https://api.github.com/repos/${repo}/releases/tags/${tag}"
+            status=\$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --header "Authorization: Bearer \$GIT_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              "\$release_url")
+
+            if [ "\$status" = "200" ]; then
+              echo "GitHub Release ${tag} already exists; reusing it"
+              exit 0
+            fi
+
+            create_status=\$(curl --silent --show-error --output github-release-response.json --write-out '%{http_code}' \
+              --request POST \
+              --header "Authorization: Bearer \$GIT_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "Content-Type: application/json" \
+              --data @${payloadFile} \
+              "https://api.github.com/repos/${repo}/releases")
+
+            if [ "\$create_status" != "201" ]; then
+              echo "Failed to create GitHub Release ${tag}; HTTP \$create_status"
+              cat github-release-response.json
+              exit 1
+            fi
+
+            echo "Created GitHub Release ${tag}"
+        """
+    }
+}
+
+def jsonEscape(String value) {
+    return value
+        .replace('\\', '\\\\')
+        .replace('"', '\\"')
+        .replace('\r', '\\r')
+        .replace('\n', '\\n')
+        .replace('\t', '\\t')
 }
 
 return this

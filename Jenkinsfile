@@ -235,14 +235,18 @@ pipeline {
                             def imageTag
                             stage("Build & Push Image: ${api.slug}") {
                                 def pushImg = load 'jenkins/lib/Buildandpushimage.groovy'
-                                imageTag = pushImg([
-                                    apiPath              : api.path,
-                                    apiSlug              : api.slug,
-                                    version              : result.version,
-                                    registry             : env.REGISTRY,
-                                    registryCredentialsId: env.REGISTRY_CRED_ID,
-                                    pushLatest           : true,
-                                ])
+                                node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                    deleteDir()
+                                    unstash "docker-check-${api.slug}"
+                                    imageTag = pushImg([
+                                        apiPath              : api.path,
+                                        apiSlug              : api.slug,
+                                        version              : result.version,
+                                        registry             : env.REGISTRY,
+                                        registryCredentialsId: env.REGISTRY_CRED_ID,
+                                        pushLatest           : true,
+                                    ])
+                                }
                             }
 
                             stage("Approve Production Deploy: ${api.slug}") {
