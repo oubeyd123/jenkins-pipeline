@@ -30,6 +30,8 @@ pipeline {
                     checkout scm
                     sh "git config user.name 'jenkins'"
                     sh "git config user.email 'jenkins@ci.local'"
+                    env.SOURCE_COMMIT = env.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.SOURCE_URL = env.GIT_URL ?: sh(script: 'git config --get remote.origin.url || true', returnStdout: true).trim()
 
                     env.IS_PR = env.CHANGE_ID ? 'true' : 'false'
                     env.IS_DEVELOP = (env.BRANCH_NAME == 'develop' && env.CHANGE_ID == null) ? 'true' : 'false'
