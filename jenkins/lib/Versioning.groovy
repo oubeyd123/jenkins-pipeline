@@ -65,7 +65,7 @@ def nextVersion(String apiSlug, String apiPath) {
     ]
 }
 
-def tagAndRelease(String tag, String changelogBody) {
+def tagAndRelease(String tag, String changelogBody, String gitCredentialsId = '') {
     def exists = sh(
         script: "git ls-remote --exit-code --tags origin refs/tags/${tag} >/dev/null 2>&1",
         returnStatus: true
@@ -75,7 +75,29 @@ def tagAndRelease(String tag, String changelogBody) {
         echo "Tag ${tag} already exists remotely; reusing it for this run"
     } else {
         sh "git tag ${tag}"
-        sh "git push origin ${tag}"
+        if (gitCredentialsId) {
+            withCredentials([usernamePassword(
+                credentialsId: gitCredentialsId,
+                usernameVariable: 'GIT_USER',
+                passwordVariable: 'GIT_TOKEN'
+            )]) {
+                sh """
+                    set -euo pipefail
+                    remote_url=\$(git config --get remote.origin.url)
+                    case "\$remote_url" in
+                      https://github.com/*)
+                        auth_url=\$(printf '%s\n' "\$remote_url" | sed "s#https://github.com/#https://\$GIT_USER:\$GIT_TOKEN@github.com/#")
+                        ;;
+                      *)
+                        auth_url="\$remote_url"
+                        ;;
+                    esac
+                    git push "\$auth_url" ${tag}
+                """
+            }
+        } else {
+            sh "git push origin ${tag}"
+        }
     }
 
     def notesFile = "release-notes-${tag}.txt"

@@ -10,6 +10,7 @@ pipeline {
     environment {
         REGISTRY               = 'docker.io/oubeyd' 
         REGISTRY_CRED_ID       = '4865805f-a74b-4c16-a608-99d6194055bc'           
+        GIT_CRED_ID            = 'github-token'
         BUILD_AGENT_LABEL      = ''
         DEV_DEPLOY_AGENT_LABEL = 'wso2-dev-server'              
         DEPLOY_AGENT_LABEL     = 'wso2-target-server'          
@@ -228,7 +229,7 @@ pipeline {
                             }
 
                             stage("Version & Tag: ${api.slug}") {
-                                versioning.tagAndRelease(result.tag, result.changelog)
+                                versioning.tagAndRelease(result.tag, result.changelog, env.GIT_CRED_ID)
                             }
 
                             def imageTag
