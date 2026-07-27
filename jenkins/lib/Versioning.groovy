@@ -22,7 +22,7 @@ def nextVersion(String apiSlug, String apiPath) {
     int patch = parts[2]
 
     String bump = 'patch'
-    StringBuilder changelog = new StringBuilder()
+    def changelogLines = []
 
     commits.split('\n').each { line ->
         def bits = line.split(/\|/, 2)
@@ -32,7 +32,7 @@ def nextVersion(String apiSlug, String apiPath) {
 
         def msg = bits[0]
         def sha = bits[1]
-        changelog << "- ${msg} (${sha})\n"
+        changelogLines.add("- ${msg} (${sha})")
 
         if (msg ==~ /(?i).*BREAKING CHANGE.*/ || msg ==~ /(?i)^[a-z]+(\([^)]*\))?!:.*/) {
             bump = 'major'
@@ -60,7 +60,7 @@ def nextVersion(String apiSlug, String apiPath) {
     return [
         version  : newVersion,
         tag      : "${apiSlug}-v${newVersion}",
-        changelog: changelog.toString(),
+        changelog: changelogLines.join('\n') + '\n',
         bump     : bump,
     ]
 }
