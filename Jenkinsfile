@@ -96,6 +96,8 @@ pipeline {
                                     version              : "dev-${env.BUILD_NUMBER}",
                                     registry             : env.REGISTRY,
                                     registryCredentialsId: env.REGISTRY_CRED_ID,
+                                    commitSha            : env.SOURCE_COMMIT,
+                                    sourceUrl            : env.SOURCE_URL,
                                 ])
                             }
                         }
@@ -257,7 +259,7 @@ pipeline {
                             }
 
                             stage("Version & Tag: ${api.slug}") {
-                                versioning.tagAndRelease(result.tag, result.changelog, env.GIT_CRED_ID)
+                                versioning.tagAndRelease(result.tag, result.releaseName, result.changelog, env.GIT_CRED_ID)
                             }
 
                             def imageTag
@@ -273,6 +275,8 @@ pipeline {
                                         registry             : env.REGISTRY,
                                         registryCredentialsId: env.REGISTRY_CRED_ID,
                                         pushLatest           : true,
+                                        commitSha            : env.SOURCE_COMMIT,
+                                        sourceUrl            : env.SOURCE_URL,
                                     ])
                                 }
                             }
@@ -280,7 +284,7 @@ pipeline {
                             stage("Trivy Scan Image: ${api.slug}") {
                                 def security = load 'jenkins/lib/securityChecks.groovy'
                                 node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                    security.image(imageTag, 'HIGH,CRITICAL')
+                                    security.image(imageTag)
                                 }
                             }
 
