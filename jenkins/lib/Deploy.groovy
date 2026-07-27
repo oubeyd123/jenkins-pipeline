@@ -60,9 +60,12 @@ def call(Map cfg) {
     """
     def mappedPort = powershell(
         script: """
-            \$mapping = docker port '${containerName}' 8290/tcp
-            if (\$mapping -match ':(\\d+)\$') {
-              \$Matches[1]
+            \$mappings = docker port '${containerName}' 8290/tcp
+            foreach (\$mapping in \$mappings) {
+              if (\$mapping -match ':(\\d+)\$') {
+                Write-Output \$Matches[1]
+                break
+              }
             }
         """,
         returnStdout: true
