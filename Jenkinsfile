@@ -13,11 +13,13 @@ pipeline {
         GIT_CRED_ID            = 'github-token'
         BUILD_AGENT_LABEL      = ''
         DEV_DEPLOY_AGENT_LABEL = 'wso2-dev-server'              
-        DEPLOY_AGENT_LABEL     = 'wso2-target-server'          
+        DEPLOY_AGENT_LABEL     = 'wso2-dev-server'          
         SMOKE_BASE_URL         = 'http://localhost:8290'               
         DEV_CONTAINER_NAME     = 'wso2-mi-dev'
         DEV_CONTAINER_PORTS    = '-p 8290:8290 -p 8253:8253 -p 9164:9164'
         DEV_IMAGE_NAME         = 'wso2-mi-dev'
+        TRIVY_WINDOWS_CACHE_DIR = 'C:\\trivy-cache'
+        TRIVY_UNIX_CACHE_DIR    = '.trivy-cache'
     }
 
     stages {
@@ -55,6 +57,18 @@ pipeline {
                             }
                         }
 
+                        stage('Validate Runtime API Contexts') {
+                            def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
+                            runtimeChecks.uniqueApiContexts(apis)
+                        }
+
+                        stage('Security Scan Changed APIs') {
+                            def security = load 'jenkins/lib/securityChecks.groovy'
+                            apis.each { api ->
+                                security.fs("apis/${api.path}")
+                            }
+                        }
+
                         stage('Build Changed CARs') {
                             sh 'rm -rf target/dev-carbonapps && mkdir -p target/dev-carbonapps'
 
@@ -81,6 +95,13 @@ pipeline {
                                     registry             : env.REGISTRY,
                                     registryCredentialsId: env.REGISTRY_CRED_ID,
                                 ])
+                            }
+                        }
+
+                        stage('Trivy Scan Dev Image') {
+                            def security = load 'jenkins/lib/securityChecks.groovy'
+                            node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                security.image(imageTag)
                             }
                         }
 
@@ -128,6 +149,11 @@ pipeline {
                                 quality(api.path)
                             }
 
+                            stage("Security Scan: ${api.slug}") {
+                                def security = load 'jenkins/lib/securityChecks.groovy'
+                                security.fs("apis/${api.path}")
+                            }
+
                             stage("Test & Package CAR: ${api.slug}") {
                                 def build = load 'jenkins/lib/Buildandpackage.groovy'
                                 def car = build(api.path)
@@ -138,6 +164,7 @@ pipeline {
                             }
 
                             stage("Docker Build Check: ${api.slug}") {
+                                def security = load 'jenkins/lib/securityChecks.groovy'
                                 node(env.DEV_DEPLOY_AGENT_LABEL) {
                                     deleteDir()
                                     unstash "docker-check-${api.slug}"
@@ -159,6 +186,7 @@ pipeline {
                                               -t local/${api.slug}:${env.BUILD_NUMBER} .
                                         """
                                     }
+                                    security.image("local/${api.slug}:${env.BUILD_NUMBER}")
                                 }
                             }
 
@@ -249,8 +277,11 @@ pipeline {
                                 }
                             }
 
-                            stage("Approve Production Deploy: ${api.slug}") {
-                                input message: "Deploy ${api.slug} ${result.version} to production?"
+                            stage("Trivy Scan Image: ${api.slug}") {
+                                def security = load 'jenkins/lib/securityChecks.groovy'
+                                node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                    security.image(imageTag)
+                                }
                             }
 
                             stage("Deploy: ${api.slug}") {
