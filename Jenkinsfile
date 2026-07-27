@@ -30,6 +30,8 @@ pipeline {
                     checkout scm
                     sh "git config user.name 'jenkins'"
                     sh "git config user.email 'jenkins@ci.local'"
+                    env.SOURCE_COMMIT = env.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.SOURCE_URL = env.GIT_URL ?: sh(script: 'git config --get remote.origin.url || true', returnStdout: true).trim()
 
                     env.IS_PR = env.CHANGE_ID ? 'true' : 'false'
                     env.IS_DEVELOP = (env.BRANCH_NAME == 'develop' && env.CHANGE_ID == null) ? 'true' : 'false'
@@ -164,7 +166,6 @@ pipeline {
                             }
 
                             stage("Docker Build Check: ${api.slug}") {
-                                def security = load 'jenkins/lib/securityChecks.groovy'
                                 node(env.DEV_DEPLOY_AGENT_LABEL) {
                                     deleteDir()
                                     unstash "docker-check-${api.slug}"
@@ -186,7 +187,6 @@ pipeline {
                                               -t local/${api.slug}:${env.BUILD_NUMBER} .
                                         """
                                     }
-                                    security.image("local/${api.slug}:${env.BUILD_NUMBER}")
                                 }
                             }
 
@@ -280,14 +280,19 @@ pipeline {
                             stage("Trivy Scan Image: ${api.slug}") {
                                 def security = load 'jenkins/lib/securityChecks.groovy'
                                 node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                    security.image(imageTag)
+                                    security.image(imageTag, 'HIGH,CRITICAL')
                                 }
                             }
 
+                            def deployment
                             stage("Deploy: ${api.slug}") {
                                 def deploy = load 'jenkins/lib/Deploy.groovy'
                                 node(env.DEPLOY_AGENT_LABEL) {
-                                    deploy([apiSlug: api.slug, imageTag: imageTag])
+                                    deployment = deploy([
+                                        apiSlug      : api.slug,
+                                        imageTag     : imageTag,
+                                        containerName: "${api.slug}-release",
+                                    ])
                                 }
                             }
 
@@ -303,9 +308,9 @@ pipeline {
                                 def smoke = load 'jenkins/lib/smokeTest.groovy'
                                 node(env.DEPLOY_AGENT_LABEL) {
                                     smoke([
-                                        apiSlug : api.slug,
+                                        apiSlug : deployment.containerName,
                                         contexts: smokeContexts,
-                                        baseUrl : env.SMOKE_BASE_URL,
+                                        baseUrl : deployment.baseUrl,
                                     ])
                                 }
                             }
