@@ -5,7 +5,7 @@ def call(String diffRange) {
             set -euo pipefail
 
             if [ '${safeDiffRange}' = 'HEAD' ]; then
-              git show --name-only --pretty=format: HEAD -- 'apis/**'
+              git diff-tree --no-commit-id --name-only -r -m HEAD -- 'apis/**'
             else
               git diff --name-only '${safeDiffRange}' -- 'apis/**'
             fi |
