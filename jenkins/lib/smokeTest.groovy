@@ -20,8 +20,14 @@ def call(Map cfg) {
                 contexts='''${cfg.contexts}'''
                 for context in \$contexts; do
                   url="${cfg.baseUrl}\$context"
+                  slash_url="\$url/"
                   echo "Smoke testing \$url"
-                  curl --fail --silent --show-error --retry 5 --retry-delay 5 "\$url"
+                  if curl --fail --silent --show-error --retry 5 --retry-delay 5 "\$url"; then
+                    continue
+                  fi
+
+                  echo "Smoke testing \$slash_url"
+                  curl --fail --silent --show-error --retry 5 --retry-delay 5 "\$slash_url"
                 done
             """
         } else {
@@ -33,8 +39,18 @@ ${cfg.contexts}
 
                 foreach (\$context in \$contexts) {
                   \$url = '${cfg.baseUrl}' + \$context
+                  \$slashUrl = \$url + '/'
                   Write-Host "Smoke testing \$url"
                   curl.exe --fail --silent --show-error --retry 5 --retry-delay 5 "\$url"
+                  if (\$LASTEXITCODE -eq 0) {
+                    continue
+                  }
+
+                  Write-Host "Smoke testing \$slashUrl"
+                  curl.exe --fail --silent --show-error --retry 5 --retry-delay 5 "\$slashUrl"
+                  if (\$LASTEXITCODE -ne 0) {
+                    exit \$LASTEXITCODE
+                  }
                 }
             """
         }
@@ -66,8 +82,14 @@ ${cfg.contexts}
 
         for context in \$contexts; do
           url="${cfg.baseUrl}\$context"
+          slash_url="\$url/"
           echo "Smoke testing \$url"
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 "\$url"
+          if curl --fail --silent --show-error --retry 5 --retry-delay 5 "\$url"; then
+            continue
+          fi
+
+          echo "Smoke testing \$slash_url"
+          curl --fail --silent --show-error --retry 5 --retry-delay 5 "\$slash_url"
         done
     """
 }
