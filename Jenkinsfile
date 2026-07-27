@@ -133,7 +133,7 @@ pipeline {
                                 junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
                                 archiveArtifacts artifacts: car, fingerprint: true
                                 archiveArtifacts allowEmptyArchive: true, artifacts: "apis/${api.path}/target/*.log"
-                                stash name: "docker-check-${api.slug}", includes: "apis/${api.path}/deployment/docker/Dockerfile,apis/${api.path}/target/*.car"
+                                stash name: "docker-check-${api.slug}", includes: "apis/${api.path}/deployment/docker/**,apis/${api.path}/target/*.car"
                             }
 
                             stage("Docker Build Check: ${api.slug}") {
@@ -144,7 +144,18 @@ pipeline {
                                         powershell """
                                             \$ErrorActionPreference = 'Stop'
                                             docker info | Out-Host
-                                            docker build -f deployment/docker/Dockerfile -t local/${api.slug}:${env.BUILD_NUMBER} .
+                                            New-Item -ItemType Directory -Force -Path CompositeApps | Out-Null
+                                            New-Item -ItemType Directory -Force -Path resources | Out-Null
+                                            Copy-Item -Path target\\*.car -Destination CompositeApps\\ -Force
+                                            if (Test-Path deployment\\docker\\resources) {
+                                              Copy-Item -Path deployment\\docker\\resources\\* -Destination resources\\ -Recurse -Force
+                                            }
+
+                                            docker build `
+                                              --build-arg BASE_IMAGE=wso2/wso2mi:4.6.0 `
+                                              --build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0 `
+                                              -f deployment/docker/Dockerfile `
+                                              -t local/${api.slug}:${env.BUILD_NUMBER} .
                                         """
                                     }
                                 }
