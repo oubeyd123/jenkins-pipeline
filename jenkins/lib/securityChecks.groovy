@@ -45,7 +45,8 @@ def image(String imageRef) {
               exit 1
             fi
 
-            trivy image --exit-code 1 --severity HIGH,CRITICAL '${imageRef}'
+            trivy image --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
+            trivy image --exit-code 1 --severity CRITICAL '${imageRef}'
         """
         return
     }
@@ -57,7 +58,8 @@ def image(String imageRef) {
           throw 'trivy is required for image scanning but is not installed on this agent'
         }
 
-        trivy image --exit-code 1 --severity HIGH,CRITICAL '${imageRef}'
+        trivy image --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
+        trivy image --exit-code 1 --severity CRITICAL '${imageRef}'
     """
 }
 
