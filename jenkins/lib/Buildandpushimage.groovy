@@ -4,33 +4,58 @@ def call(Map cfg) {
     def versionTag = cfg.version.startsWith('v') ? "${cfg.version}-${shortSha}" : "v${cfg.version}-${shortSha}"
     def imageTag = "${imageRef}:${versionTag}"
     def pushLatest = cfg.get('pushLatest', false)
+    def latestTag = "${imageRef}:latest"
+    def registryHost = cfg.registry.tokenize('/')[0]
 
     dir("apis/${cfg.apiPath}") {
-        sh '''
-            set -euo pipefail
-            mkdir -p CompositeApps resources
-            cp target/*.car CompositeApps/
-            if [ -d deployment/docker/resources ]; then
-              cp -R deployment/docker/resources/. resources/
-            fi
-        '''
+        withCredentials([usernamePassword(
+            credentialsId: cfg.registryCredentialsId,
+            usernameVariable: 'REGISTRY_USER',
+            passwordVariable: 'REGISTRY_PASSWORD'
+        )]) {
+            if (isUnix()) {
+                sh """
+                    set -euo pipefail
+                    mkdir -p CompositeApps resources
+                    cp target/*.car CompositeApps/
+                    if [ -d deployment/docker/resources ]; then
+                      cp -R deployment/docker/resources/. resources/
+                    fi
 
-        docker.withRegistry("https://${cfg.registry}", cfg.registryCredentialsId) {
-            def labels = [
-                "--label org.opencontainers.image.revision=${env.GIT_COMMIT ?: 'unknown'}",
-                "--label org.opencontainers.image.version=${cfg.version}",
-                "--label org.opencontainers.image.source=${env.GIT_URL ?: 'unknown'}"
-            ].join(' ')
-            def buildArgs = [
-                "--build-arg BASE_IMAGE=wso2/wso2mi:4.6.0",
-                "--build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0"
-            ].join(' ')
+                    echo "\$REGISTRY_PASSWORD" | docker login '${registryHost}' --username "\$REGISTRY_USER" --password-stdin
+                    docker build \
+                      --label org.opencontainers.image.revision='${env.GIT_COMMIT ?: 'unknown'}' \
+                      --label org.opencontainers.image.version='${cfg.version}' \
+                      --label org.opencontainers.image.source='${env.GIT_URL ?: 'unknown'}' \
+                      --build-arg BASE_IMAGE=wso2/wso2mi:4.6.0 \
+                      --build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0 \
+                      -f deployment/docker/Dockerfile \
+                      -t '${imageTag}' .
+                    docker push '${imageTag}'
+                    ${pushLatest ? "docker tag '${imageTag}' '${latestTag}'\ndocker push '${latestTag}'" : ""}
+                """
+            } else {
+                powershell """
+                    \$ErrorActionPreference = 'Stop'
+                    New-Item -ItemType Directory -Force -Path CompositeApps | Out-Null
+                    New-Item -ItemType Directory -Force -Path resources | Out-Null
+                    Copy-Item -Path target\\*.car -Destination CompositeApps\\ -Force
+                    if (Test-Path deployment\\docker\\resources) {
+                      Copy-Item -Path deployment\\docker\\resources\\* -Destination resources\\ -Recurse -Force
+                    }
 
-            def img = docker.build(imageTag, "${labels} ${buildArgs} -f deployment/docker/Dockerfile .")
-            img.push()
-
-            if (pushLatest) {
-                img.push('latest')
+                    \$env:REGISTRY_PASSWORD | docker login '${registryHost}' --username \$env:REGISTRY_USER --password-stdin
+                    docker build `
+                      --label org.opencontainers.image.revision='${env.GIT_COMMIT ?: 'unknown'}' `
+                      --label org.opencontainers.image.version='${cfg.version}' `
+                      --label org.opencontainers.image.source='${env.GIT_URL ?: 'unknown'}' `
+                      --build-arg BASE_IMAGE=wso2/wso2mi:4.6.0 `
+                      --build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0 `
+                      -f deployment/docker/Dockerfile `
+                      -t '${imageTag}' .
+                    docker push '${imageTag}'
+                    ${pushLatest ? "docker tag '${imageTag}' '${latestTag}'\ndocker push '${latestTag}'" : ""}
+                """
             }
         }
     }
