@@ -9,7 +9,7 @@ pipeline {
 
     environment {
         REGISTRY               = 'docker.io/oubeyd' 
-        REGISTRY_CRED_ID       = 'dockerhub-token'           
+        REGISTRY_CRED_ID       = '4865805f-a74b-4c16-a608-99d6194055bc'           
         BUILD_AGENT_LABEL      = ''
         DEV_DEPLOY_AGENT_LABEL = 'wso2-dev-server'              
         DEPLOY_AGENT_LABEL     = 'wso2-target-server'          
