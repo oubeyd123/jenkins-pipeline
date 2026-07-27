@@ -1,0 +1,5 @@
+[233] 11. Evolution from the Initial GitHub Actions Design
+[235] 11.1 Why the Change Happened
+[237] 11.2 What Changed
+[238] ConcernOriginal Design (GitHub Actions)Current Design (Jenkins)Execution engineGitHub Actions, native to the GitHub plat
+[239] 11.3 What Stayed the Same

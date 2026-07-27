@@ -57,15 +57,28 @@ def nextVersion(String apiSlug, String apiPath) {
     }
 
     String newVersion = "${major}.${minor}.${patch}"
+    String commitSha = env.SOURCE_COMMIT ?: env.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+    String releaseName = "${apiSlug} v${newVersion}"
+    String releaseBody = """API name: ${apiSlug}
+API path: ${apiPath}
+Version: ${newVersion}
+Commit SHA: ${commitSha}
+
+Changes included:
+
+${changelogLines.join('\n')}
+"""
+
     return [
-        version  : newVersion,
-        tag      : "${apiSlug}-v${newVersion}",
-        changelog: changelogLines.join('\n') + '\n',
-        bump     : bump,
+        version    : newVersion,
+        tag        : "${apiSlug}-v${newVersion}",
+        releaseName: releaseName,
+        changelog  : releaseBody,
+        bump       : bump,
     ]
 }
 
-def tagAndRelease(String tag, String changelogBody, String gitCredentialsId = '') {
+def tagAndRelease(String tag, String releaseName, String changelogBody, String gitCredentialsId = '') {
     def exists = sh(
         script: "git ls-remote --exit-code --tags origin refs/tags/${tag} >/dev/null 2>&1",
         returnStatus: true
@@ -105,13 +118,13 @@ def tagAndRelease(String tag, String changelogBody, String gitCredentialsId = ''
     archiveArtifacts artifacts: notesFile, fingerprint: true
 
     if (gitCredentialsId) {
-        createGitHubRelease(tag, changelogBody, gitCredentialsId)
+        createGitHubRelease(tag, releaseName, changelogBody, gitCredentialsId)
     } else {
         echo "No GitHub credential configured; skipping GitHub Release creation for ${tag}"
     }
 }
 
-def createGitHubRelease(String tag, String changelogBody, String gitCredentialsId) {
+def createGitHubRelease(String tag, String releaseName, String changelogBody, String gitCredentialsId) {
     def remoteUrl = sh(
         script: "git config --get remote.origin.url",
         returnStdout: true
@@ -124,7 +137,7 @@ def createGitHubRelease(String tag, String changelogBody, String gitCredentialsI
 
     def releasePayload = """{
   "tag_name": "${jsonEscape(tag)}",
-  "name": "${jsonEscape(tag)}",
+  "name": "${jsonEscape(releaseName)}",
   "body": "${jsonEscape(changelogBody)}",
   "draft": false,
   "prerelease": false
