@@ -1,6 +1,6 @@
 def call(Map cfg) {
     def containerName = cfg.get('containerName', cfg.apiSlug)
-    def ports = cfg.get('ports', '')
+    def ports = cfg.get('ports', '-p 8290')
     def envFile = cfg.get('envFile', '')
     def healthCommand = cfg.get('healthCommand', "docker ps --filter name=^/${containerName}\$ --filter status=running --format '{{.Names}}' | grep -q '^${containerName}\$'")
 
@@ -23,7 +23,17 @@ def call(Map cfg) {
             sleep 10
             ${healthCommand}
         """
-        return
+        def mappedPort = sh(
+            script: "docker port '${containerName}' 8290/tcp | sed -n 's/.*://p' | head -n1",
+            returnStdout: true
+        ).trim()
+        if (!mappedPort) {
+            error "Could not determine mapped HTTP port for container ${containerName}"
+        }
+        return [
+            containerName: containerName,
+            baseUrl      : "http://localhost:${mappedPort}",
+        ]
     }
 
     powershell """
@@ -48,6 +58,22 @@ def call(Map cfg) {
           throw 'Container ${containerName} is not running'
         }
     """
+    def mappedPort = powershell(
+        script: """
+            \$mapping = docker port '${containerName}' 8290/tcp
+            if (\$mapping -match ':(\\d+)\$') {
+              \$Matches[1]
+            }
+        """,
+        returnStdout: true
+    ).trim()
+    if (!mappedPort) {
+        error "Could not determine mapped HTTP port for container ${containerName}"
+    }
+    return [
+        containerName: containerName,
+        baseUrl      : "http://localhost:${mappedPort}",
+    ]
 }
 
 return this
