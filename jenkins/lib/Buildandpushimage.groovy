@@ -1,7 +1,7 @@
 def call(Map cfg) {
-    def commitSha = env.GIT_COMMIT ?: commandOutput('git rev-parse HEAD')
+    def commitSha = cfg.get('commitSha', env.SOURCE_COMMIT ?: env.GIT_COMMIT ?: commandOutput('git rev-parse HEAD'))
     def shortSha = commitSha.take(8)
-    def sourceUrl = env.GIT_URL ?: remoteUrl()
+    def sourceUrl = cfg.get('sourceUrl', env.SOURCE_URL ?: env.GIT_URL ?: remoteUrl())
     def imageRef = "${cfg.registry}/${cfg.apiSlug}"
     def versionTag = cfg.version.startsWith('v') ? "${cfg.version}-${shortSha}" : "v${cfg.version}-${shortSha}"
     def imageTag = "${imageRef}:${versionTag}"
