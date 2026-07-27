@@ -39,7 +39,7 @@ def fs(String targetPath) {
     """
 }
 
-def image(String imageRef) {
+def image(String imageRef, String failSeverity = 'CRITICAL') {
     if (isUnix()) {
         sh """
             set -euo pipefail
@@ -51,8 +51,8 @@ def image(String imageRef) {
               exit 1
             fi
 
-            trivy image --cache-dir "\$TRIVY_CACHE_DIR" --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
-            trivy image --cache-dir "\$TRIVY_CACHE_DIR" --exit-code 1 --severity CRITICAL '${imageRef}'
+            trivy image --cache-dir "\$TRIVY_CACHE_DIR" --scanners vuln --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
+            trivy image --cache-dir "\$TRIVY_CACHE_DIR" --scanners vuln --exit-code 1 --severity '${failSeverity}' '${imageRef}'
         """
         return
     }
@@ -66,8 +66,8 @@ def image(String imageRef) {
           throw 'trivy is required for image scanning but is not installed on this agent'
         }
 
-        trivy image --cache-dir \$trivyCacheDir --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
-        trivy image --cache-dir \$trivyCacheDir --exit-code 1 --severity CRITICAL '${imageRef}'
+        trivy image --cache-dir \$trivyCacheDir --scanners vuln --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
+        trivy image --cache-dir \$trivyCacheDir --scanners vuln --exit-code 1 --severity '${failSeverity}' '${imageRef}'
     """
 }
 

@@ -164,7 +164,6 @@ pipeline {
                             }
 
                             stage("Docker Build Check: ${api.slug}") {
-                                def security = load 'jenkins/lib/securityChecks.groovy'
                                 node(env.DEV_DEPLOY_AGENT_LABEL) {
                                     deleteDir()
                                     unstash "docker-check-${api.slug}"
@@ -186,7 +185,6 @@ pipeline {
                                               -t local/${api.slug}:${env.BUILD_NUMBER} .
                                         """
                                     }
-                                    security.image("local/${api.slug}:${env.BUILD_NUMBER}")
                                 }
                             }
 
@@ -280,14 +278,19 @@ pipeline {
                             stage("Trivy Scan Image: ${api.slug}") {
                                 def security = load 'jenkins/lib/securityChecks.groovy'
                                 node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                    security.image(imageTag)
+                                    security.image(imageTag, 'HIGH,CRITICAL')
                                 }
                             }
 
+                            def deployment
                             stage("Deploy: ${api.slug}") {
                                 def deploy = load 'jenkins/lib/Deploy.groovy'
                                 node(env.DEPLOY_AGENT_LABEL) {
-                                    deploy([apiSlug: api.slug, imageTag: imageTag])
+                                    deployment = deploy([
+                                        apiSlug      : api.slug,
+                                        imageTag     : imageTag,
+                                        containerName: "${api.slug}-release",
+                                    ])
                                 }
                             }
 
@@ -303,9 +306,9 @@ pipeline {
                                 def smoke = load 'jenkins/lib/smokeTest.groovy'
                                 node(env.DEPLOY_AGENT_LABEL) {
                                     smoke([
-                                        apiSlug : api.slug,
+                                        apiSlug : deployment.containerName,
                                         contexts: smokeContexts,
-                                        baseUrl : env.SMOKE_BASE_URL,
+                                        baseUrl : deployment.baseUrl,
                                     ])
                                 }
                             }
