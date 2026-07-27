@@ -18,6 +18,8 @@ pipeline {
         DEV_CONTAINER_NAME     = 'wso2-mi-dev'
         DEV_CONTAINER_PORTS    = '-p 8290:8290 -p 8253:8253 -p 9164:9164'
         DEV_IMAGE_NAME         = 'wso2-mi-dev'
+        TRIVY_WINDOWS_CACHE_DIR = 'C:\\trivy-cache'
+        TRIVY_UNIX_CACHE_DIR    = '.trivy-cache'
     }
 
     stages {
@@ -53,6 +55,11 @@ pipeline {
                             apis.each { api ->
                                 quality(api.path)
                             }
+                        }
+
+                        stage('Validate Runtime API Contexts') {
+                            def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
+                            runtimeChecks.uniqueApiContexts(apis)
                         }
 
                         stage('Security Scan Changed APIs') {

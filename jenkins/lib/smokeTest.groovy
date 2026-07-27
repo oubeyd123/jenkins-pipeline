@@ -37,6 +37,7 @@ def call(Map cfg) {
 
                   if [ "\$passed" != "true" ]; then
                     echo "Smoke test failed for context \$context"
+                    docker logs --tail 200 '${cfg.apiSlug}' || true
                     exit 1
                   fi
                 done
@@ -75,6 +76,7 @@ ${cfg.contexts}
                   }
 
                   if (-not \$passed) {
+                    docker logs --tail 200 '${cfg.apiSlug}'
                     throw "Smoke test failed for context \$context"
                   }
                 }
@@ -125,6 +127,7 @@ ${cfg.contexts}
 
           if [ "\$passed" != "true" ]; then
             echo "Smoke test failed for context \$context"
+            docker logs --tail 200 '${cfg.apiSlug}' || true
             exit 1
           fi
         done
