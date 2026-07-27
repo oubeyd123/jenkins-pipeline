@@ -7,3 +7,4 @@ COPY target/*.car ${WSO2_SERVER_HOME}/repository/deployment/server/carbonapps/
 
 EXPOSE 8290 8253 9164
 # COPY libs/*.jar ${WSO2_SERVER_HOME}/lib/
+USER wso2carbon
