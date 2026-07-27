@@ -13,16 +13,73 @@ def call(Map cfg) {
     }
 
     if (cfg.contexts) {
-        sh """
-            set -euo pipefail
+        if (isUnix()) {
+            sh """
+                set -euo pipefail
 
-            contexts='''${cfg.contexts}'''
-            for context in \$contexts; do
-              url="${cfg.baseUrl}\$context"
-              echo "Smoke testing \$url"
-              curl --fail --silent --show-error --retry 5 --retry-delay 5 "\$url"
-            done
-        """
+                contexts='''${cfg.contexts}'''
+                for context in \$contexts; do
+                  url="${cfg.baseUrl}\$context"
+                  slash_url="\$url/"
+                  passed=false
+
+                  for attempt in \$(seq 1 24); do
+                    for candidate in "\$url" "\$slash_url"; do
+                      status=\$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "\$candidate" || true)
+                      echo "Smoke testing \$candidate returned HTTP \$status (attempt \$attempt/24)"
+                      case "\$status" in
+                        2*|3*) passed=true; break 2 ;;
+                      esac
+                    done
+
+                    sleep 5
+                  done
+
+                  if [ "\$passed" != "true" ]; then
+                    echo "Smoke test failed for context \$context"
+                    exit 1
+                  fi
+                done
+            """
+        } else {
+            powershell """
+                \$ErrorActionPreference = 'Stop'
+                \$contexts = @'
+${cfg.contexts}
+'@ -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) }
+
+                foreach (\$context in \$contexts) {
+                  \$url = '${cfg.baseUrl}' + \$context
+                  \$slashUrl = \$url + '/'
+                  \$passed = \$false
+
+                  for (\$attempt = 1; \$attempt -le 24; \$attempt++) {
+                    foreach (\$candidate in @(\$url, \$slashUrl)) {
+                      \$status = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' "\$candidate"
+                      if (\$LASTEXITCODE -ne 0) {
+                        \$status = '000'
+                      }
+
+                      Write-Host "Smoke testing \$candidate returned HTTP \$status (attempt \$attempt/24)"
+                      if (\$status -match '^[23]') {
+                        \$passed = \$true
+                        break
+                      }
+                    }
+
+                    if (\$passed) {
+                      break
+                    }
+
+                    Start-Sleep -Seconds 5
+                  }
+
+                  if (-not \$passed) {
+                    throw "Smoke test failed for context \$context"
+                  }
+                }
+            """
+        }
         return
     }
 
@@ -51,8 +108,25 @@ def call(Map cfg) {
 
         for context in \$contexts; do
           url="${cfg.baseUrl}\$context"
-          echo "Smoke testing \$url"
-          curl --fail --silent --show-error --retry 5 --retry-delay 5 "\$url"
+          slash_url="\$url/"
+          passed=false
+
+          for attempt in \$(seq 1 24); do
+            for candidate in "\$url" "\$slash_url"; do
+              status=\$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' "\$candidate" || true)
+              echo "Smoke testing \$candidate returned HTTP \$status (attempt \$attempt/24)"
+              case "\$status" in
+                2*|3*) passed=true; break 2 ;;
+              esac
+            done
+
+            sleep 5
+          done
+
+          if [ "\$passed" != "true" ]; then
+            echo "Smoke test failed for context \$context"
+            exit 1
+          fi
         done
     """
 }
