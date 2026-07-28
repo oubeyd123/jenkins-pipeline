@@ -34,7 +34,7 @@ def nextVersion(String apiSlug, String apiPath) {
         def sha = bits[1]
         changelogLines.add("- ${msg} (${sha})")
 
-        if (msg ==~ /(?i).*BREAKING CHANGE.*/ || msg ==~ /(?i)^[a-z]+(\([^)]*\))?!:.*/) {
+        if (msg ==~ /(?i).*BREAKING CHANGE.*/ || msg ==~ /(?i)^!:.*/ || msg ==~ /(?i)^[a-z]+(\([^)]*\))?!:.*/) {
             bump = 'major'
         } else if (msg ==~ /(?i)^feat(\([^)]*\))?:.*/ && bump != 'major') {
             bump = 'minor'
