@@ -20,6 +20,7 @@ pipeline {
         DEV_IMAGE_NAME         = 'wso2-mi-dev'
         TRIVY_WINDOWS_CACHE_DIR = 'C:\\trivy-cache'
         TRIVY_UNIX_CACHE_DIR    = '.trivy-cache'
+        FAILURE_EMAIL_RECIPIENTS = 'oubeyd887@gmail.com'
     }
 
     stages {
@@ -333,6 +334,35 @@ pipeline {
         }
         failure {
             echo "Failed: branch=${env.BRANCH_NAME ?: 'n/a'} commit=${env.GIT_COMMIT ?: 'n/a'}"
+            script {
+                if ((env.FAILURE_EMAIL_RECIPIENTS ?: '').trim()) {
+                    try {
+                        emailext(
+                            to: env.FAILURE_EMAIL_RECIPIENTS,
+                            subject: "[Jenkins] FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            mimeType: 'text/html',
+                            attachLog: true,
+                            compressLog: true,
+                            body: """
+                                <p><b>WSO2 MI pipeline failed.</b></p>
+                                <p>
+                                  <b>Job:</b> ${env.JOB_NAME}<br/>
+                                  <b>Build:</b> #${env.BUILD_NUMBER}<br/>
+                                  <b>Branch:</b> ${env.BRANCH_NAME ?: 'n/a'}<br/>
+                                  <b>Commit:</b> ${env.GIT_COMMIT ?: env.SOURCE_COMMIT ?: 'n/a'}
+                                </p>
+                                <p>
+                                  Open Jenkins build:
+                                  <a href="${env.BUILD_URL}">${env.BUILD_URL}</a>
+                                </p>
+                                <p>The console log is attached.</p>
+                            """
+                        )
+                    } catch (err) {
+                        echo "Failure email could not be sent: ${err.message}"
+                    }
+                }
+            }
         }
     }
 }
