@@ -67,7 +67,7 @@ pipeline {
                         stage('Security Scan Changed APIs') {
                             def security = load 'jenkins/lib/securityChecks.groovy'
                             apis.each { api ->
-                                security.fs("apis/${api.path}")
+                                security.fs("apis/${api.path}", api.slug)
                             }
                         }
 
@@ -105,7 +105,7 @@ pipeline {
                         stage('Trivy Scan Dev Image') {
                             def security = load 'jenkins/lib/securityChecks.groovy'
                             node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                security.image(imageTag)
+                                security.image(imageTag, env.DEV_IMAGE_NAME)
                             }
                         }
 
@@ -155,7 +155,7 @@ pipeline {
 
                             stage("Security Scan: ${api.slug}") {
                                 def security = load 'jenkins/lib/securityChecks.groovy'
-                                security.fs("apis/${api.path}")
+                                security.fs("apis/${api.path}", api.slug)
                             }
 
                             stage("Test & Package CAR: ${api.slug}") {
@@ -284,7 +284,7 @@ pipeline {
                             stage("Trivy Scan Image: ${api.slug}") {
                                 def security = load 'jenkins/lib/securityChecks.groovy'
                                 node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                    security.image(imageTag)
+                                    security.image(imageTag, api.slug)
                                 }
                             }
 
