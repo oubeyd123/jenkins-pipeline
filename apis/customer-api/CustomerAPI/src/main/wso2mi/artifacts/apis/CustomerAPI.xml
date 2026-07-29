@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<api context="/customer" name="CustomerAPI" xmlns="http://ws.apache.org/ns/synapse">
+    <resource methods="POST" uri-template="/">
+        <inSequence>
+            <datamapper config="resources:datamapper/CustomerMapper/CustomerMapper.dmc"
+                inputSchema="resources:datamapper/CustomerMapper/CustomerMapper_inputSchema.json"
+                inputType="JSON"
+                outputSchema="resources:datamapper/CustomerMapper/CustomerMapper_outputSchema.json"
+                outputType="JSON" />
+            <respond />
+        </inSequence>
+        <faultSequence>
+        </faultSequence>
+    </resource>
+</api>

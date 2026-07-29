@@ -6,73 +6,38 @@ def fs(String targetPath, String apiSlug = '') {
     int gitleaksStatus
     int trivyStatus
 
-    if (isUnix()) {
-        gitleaksStatus = sh(
-            script: """
-            set -euo pipefail
-            TRIVY_CACHE_DIR="\${TRIVY_UNIX_CACHE_DIR:-.trivy-cache}"
-            mkdir -p "\$TRIVY_CACHE_DIR" '${reportDir}'
+    gitleaksStatus = sh(
+        script: """
+        set -euo pipefail
+        TRIVY_CACHE_DIR="\${TRIVY_FS_CACHE_DIR}"
+        mkdir -p "\$TRIVY_CACHE_DIR" '${reportDir}'
 
-            if ! command -v gitleaks >/dev/null 2>&1; then
-              echo "gitleaks is required for secret scanning but is not installed on this agent"
-              exit 1
-            fi
+        if ! command -v gitleaks >/dev/null 2>&1; then
+          echo "gitleaks is required for secret scanning but is not installed on the Linux build agent"
+          exit 1
+        fi
 
-            if ! command -v trivy >/dev/null 2>&1; then
-              echo "trivy is required for filesystem scanning but is not installed on this agent"
-              exit 1
-            fi
-
-            gitleaks detect --source '${targetPath}' --redact --report-format json --report-path '${gitleaksJson}' --exit-code 1
-            if [ ! -f '${gitleaksJson}' ]; then
-              printf '[]\\n' > '${gitleaksJson}'
-            fi
-            """,
-            returnStatus: true
-        )
-        trivyStatus = sh(
-            script: """
-            set -euo pipefail
-            TRIVY_CACHE_DIR="\${TRIVY_UNIX_CACHE_DIR:-.trivy-cache}"
-            mkdir -p "\$TRIVY_CACHE_DIR" '${reportDir}'
-            trivy fs --cache-dir "\$TRIVY_CACHE_DIR" --format json --output '${trivyFsJson}' --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,secret,misconfig '${targetPath}'
-            """,
-            returnStatus: true
-        )
-    } else {
-        gitleaksStatus = powershell(
-            script: """
-        \$ErrorActionPreference = 'Stop'
-        \$trivyCacheDir = if (\$env:TRIVY_WINDOWS_CACHE_DIR) { \$env:TRIVY_WINDOWS_CACHE_DIR } else { 'C:\\trivy-cache' }
-        New-Item -ItemType Directory -Force -Path \$trivyCacheDir | Out-Null
-        New-Item -ItemType Directory -Force -Path '${reportDir}' | Out-Null
-
-        if (-not (Get-Command gitleaks -ErrorAction SilentlyContinue)) {
-          throw 'gitleaks is required for secret scanning but is not installed on this agent'
-        }
-
-        if (-not (Get-Command trivy -ErrorAction SilentlyContinue)) {
-          throw 'trivy is required for filesystem scanning but is not installed on this agent'
-        }
+        if ! command -v trivy >/dev/null 2>&1; then
+          echo "trivy is required for filesystem scanning but is not installed on the Linux build agent"
+          exit 1
+        fi
 
         gitleaks detect --source '${targetPath}' --redact --report-format json --report-path '${gitleaksJson}' --exit-code 1
-        if (-not (Test-Path '${gitleaksJson}')) {
-          '[]' | Set-Content -Path '${gitleaksJson}'
+        if [ ! -f '${gitleaksJson}' ]; then
+          printf '[]\\n' > '${gitleaksJson}'
         }
         """,
-            returnStatus: true
-        )
-        trivyStatus = powershell(
-            script: """
-        \$ErrorActionPreference = 'Stop'
-        \$trivyCacheDir = if (\$env:TRIVY_WINDOWS_CACHE_DIR) { \$env:TRIVY_WINDOWS_CACHE_DIR } else { 'C:\\trivy-cache' }
-        New-Item -ItemType Directory -Force -Path \$trivyCacheDir | Out-Null
-        New-Item -ItemType Directory -Force -Path '${reportDir}' | Out-Null
-        trivy fs --cache-dir \$trivyCacheDir --format json --output '${trivyFsJson}' --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,secret,misconfig '${targetPath}'
+        returnStatus: true
+    )
+    trivyStatus = sh(
+        script: """
+        set -euo pipefail
+        TRIVY_CACHE_DIR="\${TRIVY_FS_CACHE_DIR}"
+        mkdir -p "\$TRIVY_CACHE_DIR" '${reportDir}'
+        trivy fs --cache-dir "\$TRIVY_CACHE_DIR" --format json --output '${trivyFsJson}' --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,secret,misconfig '${targetPath}'
         """,
-            returnStatus: true
-        )
-    }
+        returnStatus: true
+    )
 
     def gitleaksFindings = countGitleaksFindings(gitleaksJson)
     def trivyFindings = countTrivyFindings(trivyFsJson)
@@ -94,7 +59,7 @@ def fs(String targetPath, String apiSlug = '') {
         ],
     ])
     archiveArtifacts allowEmptyArchive: true, artifacts: "${reportDir}/*.md"
-    removeTemporaryReportFiles([gitleaksJson, trivyFsJson])
+    sh "rm -f '${gitleaksJson}' '${trivyFsJson}'"
 
     if (gitleaksStatus != 0 || trivyStatus != 0) {
         error "Security filesystem scan failed for ${slug}"
@@ -108,55 +73,29 @@ def image(String imageRef, String apiSlug = '', String failSeverity = 'CRITICAL'
     int reportStatus
     int gateStatus
 
-    if (isUnix()) {
-        reportStatus = sh(
-            script: """
-            set -euo pipefail
-            TRIVY_CACHE_DIR="\${TRIVY_UNIX_CACHE_DIR:-.trivy-cache}"
-            mkdir -p "\$TRIVY_CACHE_DIR" '${reportDir}'
-
-            if ! command -v trivy >/dev/null 2>&1; then
-              echo "trivy is required for image scanning but is not installed on this agent"
-              exit 1
-            fi
-
-            trivy image --cache-dir "\$TRIVY_CACHE_DIR" --scanners vuln --format json --output '${trivyImageJson}' --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
-            """,
-            returnStatus: true
-        )
-        gateStatus = sh(
-            script: """
-            set -euo pipefail
-            TRIVY_CACHE_DIR="\${TRIVY_UNIX_CACHE_DIR:-.trivy-cache}"
-            trivy image --cache-dir "\$TRIVY_CACHE_DIR" --scanners vuln --exit-code 1 --severity '${failSeverity}' '${imageRef}'
-            """,
-            returnStatus: true
-        )
-    } else {
-        reportStatus = powershell(
-            script: """
+    reportStatus = powershell(
+        script: """
         \$ErrorActionPreference = 'Stop'
-        \$trivyCacheDir = if (\$env:TRIVY_WINDOWS_CACHE_DIR) { \$env:TRIVY_WINDOWS_CACHE_DIR } else { 'C:\\trivy-cache' }
+        \$trivyCacheDir = \$env:TRIVY_IMAGE_CACHE_DIR
         New-Item -ItemType Directory -Force -Path \$trivyCacheDir | Out-Null
         New-Item -ItemType Directory -Force -Path '${reportDir}' | Out-Null
 
         if (-not (Get-Command trivy -ErrorAction SilentlyContinue)) {
-          throw 'trivy is required for image scanning but is not installed on this agent'
+          throw 'trivy is required for image scanning but is not installed on the Windows Docker agent'
         }
 
         trivy image --cache-dir \$trivyCacheDir --scanners vuln --format json --output '${trivyImageJson}' --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
         """,
-            returnStatus: true
-        )
-        gateStatus = powershell(
-            script: """
+        returnStatus: true
+    )
+    gateStatus = powershell(
+        script: """
         \$ErrorActionPreference = 'Stop'
-        \$trivyCacheDir = if (\$env:TRIVY_WINDOWS_CACHE_DIR) { \$env:TRIVY_WINDOWS_CACHE_DIR } else { 'C:\\trivy-cache' }
+        \$trivyCacheDir = \$env:TRIVY_IMAGE_CACHE_DIR
         trivy image --cache-dir \$trivyCacheDir --scanners vuln --exit-code 1 --severity '${failSeverity}' '${imageRef}'
         """,
-            returnStatus: true
-        )
-    }
+        returnStatus: true
+    )
 
     def trivyFindings = countTrivyFindings(trivyImageJson)
 
@@ -175,7 +114,7 @@ def image(String imageRef, String apiSlug = '', String failSeverity = 'CRITICAL'
         ],
     ])
     archiveArtifacts allowEmptyArchive: true, artifacts: "${reportDir}/*.md"
-    removeTemporaryReportFiles([trivyImageJson])
+    powershell "Remove-Item -LiteralPath '${trivyImageJson}' -Force"
 
     if (reportStatus != 0 || gateStatus != 0) {
         error "Security image scan failed for ${slug}"
@@ -230,8 +169,7 @@ def countGitleaksFindings(String reportFile) {
         return 0
     }
 
-    def parsed = new groovy.json.JsonSlurperClassic().parseText(content)
-    return parsed instanceof List ? parsed.size() : 0
+    return countLiteral(content, '"RuleID"')
 }
 
 def countTrivyFindings(String reportFile) {
@@ -245,43 +183,21 @@ def countTrivyFindings(String reportFile) {
         return counts
     }
 
-    def parsed = new groovy.json.JsonSlurperClassic().parseText(content)
-    parsed.Results?.each { result ->
-        result.Vulnerabilities?.each { finding ->
-            addSeverity(counts, finding.Severity)
-        }
-        result.Misconfigurations?.each { finding ->
-            addSeverity(counts, finding.Severity)
-        }
-        result.Secrets?.each { finding ->
-            addSeverity(counts, finding.Severity)
-        }
-    }
+    def compact = content.replaceAll('\\s+', '')
+    counts.critical = countLiteral(compact, '"Severity":"CRITICAL"')
+    counts.high = countLiteral(compact, '"Severity":"HIGH"')
 
     return counts
 }
 
-def addSeverity(Map counts, String severity) {
-    switch ((severity ?: '').toLowerCase()) {
-        case 'critical':
-            counts.critical += 1
-            break
-        case 'high':
-            counts.high += 1
-            break
+def countLiteral(String content, String needle) {
+    int count = 0
+    int index = content.indexOf(needle)
+    while (index >= 0) {
+        count++
+        index = content.indexOf(needle, index + needle.length())
     }
-}
-
-def removeTemporaryReportFiles(List files) {
-    files.each { file ->
-        if (fileExists(file)) {
-            if (isUnix()) {
-                sh "rm -f '${file}'"
-            } else {
-                powershell "Remove-Item -LiteralPath '${file}' -Force"
-            }
-        }
-    }
+    return count
 }
 
 return this

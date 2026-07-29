@@ -15,59 +15,32 @@ def call(Map cfg) {
             usernameVariable: 'REGISTRY_USER',
             passwordVariable: 'REGISTRY_PASSWORD'
         )]) {
-            if (isUnix()) {
-                sh """
-                    set -euo pipefail
-                    mkdir -p CompositeApps resources libs
-                    touch libs/.dockerkeep
-                    cp target/*.car CompositeApps/
-                    if [ -d target/mi-runtime-libs ]; then
-                      find target/mi-runtime-libs -name '*.jar' -exec cp {} libs/ \\;
-                    fi
-                    if [ -d deployment/docker/resources ]; then
-                      cp -R deployment/docker/resources/. resources/
-                    fi
+            powershell """
+                \$ErrorActionPreference = 'Stop'
+                New-Item -ItemType Directory -Force -Path CompositeApps | Out-Null
+                New-Item -ItemType Directory -Force -Path resources | Out-Null
+                New-Item -ItemType Directory -Force -Path libs | Out-Null
+                New-Item -ItemType File -Force -Path libs\\.dockerkeep | Out-Null
+                Copy-Item -Path target\\*.car -Destination CompositeApps\\ -Force
+                if (Test-Path target\\mi-runtime-libs) {
+                  Copy-Item -Path target\\mi-runtime-libs\\*.jar -Destination libs\\ -Force -ErrorAction SilentlyContinue
+                }
+                if (Test-Path deployment\\docker\\resources) {
+                  Copy-Item -Path deployment\\docker\\resources\\* -Destination resources\\ -Recurse -Force
+                }
 
-                    echo "\$REGISTRY_PASSWORD" | docker login '${registryHost}' --username "\$REGISTRY_USER" --password-stdin
-                    docker build \
-                      --label org.opencontainers.image.revision='${commitSha}' \
-                      --label org.opencontainers.image.version='${cfg.version}' \
-                      --label org.opencontainers.image.source='${sourceUrl ?: 'unknown'}' \
-                      --build-arg BASE_IMAGE=wso2/wso2mi:4.6.0 \
-                      --build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0 \
-                      -f deployment/docker/Dockerfile \
-                      -t '${imageTag}' .
-                    docker push '${imageTag}'
-                    ${pushLatest ? "docker tag '${imageTag}' '${latestTag}'\ndocker push '${latestTag}'" : ""}
-                """
-            } else {
-                powershell """
-                    \$ErrorActionPreference = 'Stop'
-                    New-Item -ItemType Directory -Force -Path CompositeApps | Out-Null
-                    New-Item -ItemType Directory -Force -Path resources | Out-Null
-                    New-Item -ItemType Directory -Force -Path libs | Out-Null
-                    New-Item -ItemType File -Force -Path libs\\.dockerkeep | Out-Null
-                    Copy-Item -Path target\\*.car -Destination CompositeApps\\ -Force
-                    if (Test-Path target\\mi-runtime-libs) {
-                      Copy-Item -Path target\\mi-runtime-libs\\*.jar -Destination libs\\ -Force -ErrorAction SilentlyContinue
-                    }
-                    if (Test-Path deployment\\docker\\resources) {
-                      Copy-Item -Path deployment\\docker\\resources\\* -Destination resources\\ -Recurse -Force
-                    }
-
-                    \$env:REGISTRY_PASSWORD | docker login '${registryHost}' --username \$env:REGISTRY_USER --password-stdin
-                    docker build `
-                      --label org.opencontainers.image.revision='${commitSha}' `
-                      --label org.opencontainers.image.version='${cfg.version}' `
-                      --label org.opencontainers.image.source='${sourceUrl ?: 'unknown'}' `
-                      --build-arg BASE_IMAGE=wso2/wso2mi:4.6.0 `
-                      --build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0 `
-                      -f deployment/docker/Dockerfile `
-                      -t '${imageTag}' .
-                    docker push '${imageTag}'
-                    ${pushLatest ? "docker tag '${imageTag}' '${latestTag}'\ndocker push '${latestTag}'" : ""}
-                """
-            }
+                \$env:REGISTRY_PASSWORD | docker login '${registryHost}' --username \$env:REGISTRY_USER --password-stdin
+                docker build `
+                  --label org.opencontainers.image.revision='${commitSha}' `
+                  --label org.opencontainers.image.version='${cfg.version}' `
+                  --label org.opencontainers.image.source='${sourceUrl ?: 'unknown'}' `
+                  --build-arg BASE_IMAGE=wso2/wso2mi:4.6.0 `
+                  --build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0 `
+                  -f deployment/docker/Dockerfile `
+                  -t '${imageTag}' .
+                docker push '${imageTag}'
+                ${pushLatest ? "docker tag '${imageTag}' '${latestTag}'\ndocker push '${latestTag}'" : ""}
+            """
         }
     }
 
@@ -75,18 +48,10 @@ def call(Map cfg) {
 }
 
 def commandOutput(String command) {
-    if (isUnix()) {
-        return sh(script: command, returnStdout: true).trim()
-    }
-
     return powershell(script: command, returnStdout: true).trim()
 }
 
 def remoteUrl() {
-    if (isUnix()) {
-        return sh(script: 'git config --get remote.origin.url || true', returnStdout: true).trim()
-    }
-
     return powershell(
         script: '''
             $url = git config --get remote.origin.url

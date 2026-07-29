@@ -11,21 +11,21 @@ pipeline {
         REGISTRY               = 'docker.io/oubeyd' 
         REGISTRY_CRED_ID       = '4865805f-a74b-4c16-a608-99d6194055bc'           
         GIT_CRED_ID            = 'github-token'
-        BUILD_AGENT_LABEL      = ''
+        BUILD_AGENT_LABEL      = 'built-in'
         DEV_DEPLOY_AGENT_LABEL = 'wso2-dev-server'              
         DEPLOY_AGENT_LABEL     = 'wso2-dev-server'          
         SMOKE_BASE_URL         = 'http://localhost:8290'               
         DEV_CONTAINER_NAME     = 'wso2-mi-dev'
         DEV_CONTAINER_PORTS    = '-p 8290:8290 -p 8253:8253 -p 9164:9164'
         DEV_IMAGE_NAME         = 'wso2-mi-dev'
-        TRIVY_WINDOWS_CACHE_DIR = 'C:\\trivy-cache'
-        TRIVY_UNIX_CACHE_DIR    = '.trivy-cache'
+        TRIVY_FS_CACHE_DIR      = '/var/jenkins_home/trivy-cache'
+        TRIVY_IMAGE_CACHE_DIR   = 'C:\\trivy-cache'
         FAILURE_EMAIL_RECIPIENTS = 'oubeyd887@gmail.com'
     }
 
     stages {
         stage('Pipeline') {
-            agent any
+            agent { label "${BUILD_AGENT_LABEL}" }
             steps {
                 script {
                     checkout scm
