@@ -73,17 +73,25 @@ pipeline {
                         }
 
                         stage('Build Changed CARs') {
-                            sh 'rm -rf target/dev-carbonapps && mkdir -p target/dev-carbonapps'
+                            sh 'rm -rf target/dev-carbonapps target/dev-libs && mkdir -p target/dev-carbonapps target/dev-libs && touch target/dev-libs/.dockerkeep'
 
                             def build = load 'jenkins/lib/Buildandpackage.groovy'
+                            def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
                             apis.each { api ->
                                 def car = build(api.path)
+                                miRuntimeLibs.prepare(api.path)
                                 junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
                                 archiveArtifacts artifacts: car, fingerprint: true
                                 archiveArtifacts allowEmptyArchive: true, artifacts: "apis/${api.path}/target/*.log"
                                 sh "cp '${car}' target/dev-carbonapps/"
+                                sh """
+                                    set -euo pipefail
+                                    if [ -d 'apis/${api.path}/target/mi-runtime-libs' ]; then
+                                      find 'apis/${api.path}/target/mi-runtime-libs' -name '*.jar' -exec cp {} target/dev-libs/ \\;
+                                    fi
+                                """
                             }
-                            stash name: 'dev-docker-context', includes: 'Dockerfile.dev,target/dev-carbonapps/*.car'
+                            stash name: 'dev-docker-context', includes: 'Dockerfile.dev,target/dev-carbonapps/*.car,target/dev-libs/**'
                         }
 
                         def imageTag
@@ -161,11 +169,13 @@ pipeline {
 
                             stage("Test & Package CAR: ${api.slug}") {
                                 def build = load 'jenkins/lib/Buildandpackage.groovy'
+                                def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
                                 def car = build(api.path)
+                                miRuntimeLibs.prepare(api.path)
                                 junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
                                 archiveArtifacts artifacts: car, fingerprint: true
                                 archiveArtifacts allowEmptyArchive: true, artifacts: "apis/${api.path}/target/*.log"
-                                stash name: "docker-check-${api.slug}", includes: "apis/${api.path}/deployment/docker/**,apis/${api.path}/target/*.car"
+                                stash name: "docker-check-${api.slug}", includes: "apis/${api.path}/deployment/docker/**,apis/${api.path}/target/*.car,apis/${api.path}/target/mi-runtime-libs/**"
                             }
 
                             stage("Docker Build Check: ${api.slug}") {
@@ -179,6 +189,11 @@ pipeline {
                                             New-Item -ItemType Directory -Force -Path CompositeApps | Out-Null
                                             New-Item -ItemType Directory -Force -Path resources | Out-Null
                                             Copy-Item -Path target\\*.car -Destination CompositeApps\\ -Force
+                                            New-Item -ItemType Directory -Force -Path libs | Out-Null
+                                            New-Item -ItemType File -Force -Path libs\\.dockerkeep | Out-Null
+                                            if (Test-Path target\\mi-runtime-libs) {
+                                              Copy-Item -Path target\\mi-runtime-libs\\*.jar -Destination libs\\ -Force -ErrorAction SilentlyContinue
+                                            }
                                             if (Test-Path deployment\\docker\\resources) {
                                               Copy-Item -Path deployment\\docker\\resources\\* -Destination resources\\ -Recurse -Force
                                             }

@@ -1,4 +1,4 @@
-﻿# WSO2 MI CI/CD Pipeline
+# WSO2 MI CI/CD Pipeline
 
 This repository contains a Jenkins Multibranch CI/CD pipeline for WSO2 Micro Integrator (MI) API projects.
 
@@ -209,6 +209,45 @@ The Dockerfile copies CAR files into the WSO2 MI deployment folder:
 ```
 
 When the container starts, WSO2 MI automatically deploys the CAR files from that folder.
+
+## Custom MI Runtime Libraries
+
+This project uses Nexus and Maven to manage JAR files required by the WSO2 MI runtime `/lib` directory.
+
+Nexus stores the JAR files, Maven downloads the required versions, and Jenkins copies them into the Docker image during the build.
+
+Use the `mi-runtime-libs` Maven profile in the API `pom.xml` when an API needs runtime JARs such as JDBC drivers, custom mediators, validators, or third-party SDKs.
+
+```xml
+<profile>
+  <id>mi-runtime-libs</id>
+  <dependencies>
+    <dependency>
+      <groupId>com.company.wso2</groupId>
+      <artifactId>custom-mediator</artifactId>
+      <version>1.0.0</version>
+    </dependency>
+
+    <dependency>
+      <groupId>mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <version>8.4.0</version>
+    </dependency>
+  </dependencies>
+</profile>
+```
+
+During the pipeline, Jenkins resolves the dependencies and stores them in:
+
+```text
+apis/<category>/<api-name>/target/mi-runtime-libs/
+```
+
+Then Docker copies them into the WSO2 MI runtime:
+
+```text
+/home/wso2carbon/wso2mi-4.6.0/lib/
+```
 
 ## Smoke Testing
 
