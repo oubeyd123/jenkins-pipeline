@@ -40,7 +40,7 @@ def call(String diffRange) {
         .collect { it.trim() }
         .findAll { it }
         .collect { path ->
-            [path: path, slug: path.tokenize('/').join('-')]
+            [path: path, slug: path.tokenize('/').join('-').toLowerCase()]
         }
 }
 
