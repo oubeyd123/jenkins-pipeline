@@ -11,20 +11,21 @@ pipeline {
         REGISTRY               = 'docker.io/oubeyd' 
         REGISTRY_CRED_ID       = '4865805f-a74b-4c16-a608-99d6194055bc'           
         GIT_CRED_ID            = 'github-token'
-        BUILD_AGENT_LABEL      = ''
+        BUILD_AGENT_LABEL      = 'built-in'
         DEV_DEPLOY_AGENT_LABEL = 'wso2-dev-server'              
         DEPLOY_AGENT_LABEL     = 'wso2-dev-server'          
         SMOKE_BASE_URL         = 'http://localhost:8290'               
         DEV_CONTAINER_NAME     = 'wso2-mi-dev'
         DEV_CONTAINER_PORTS    = '-p 8290:8290 -p 8253:8253 -p 9164:9164'
         DEV_IMAGE_NAME         = 'wso2-mi-dev'
-        TRIVY_WINDOWS_CACHE_DIR = 'C:\\trivy-cache'
-        TRIVY_UNIX_CACHE_DIR    = '.trivy-cache'
+        TRIVY_FS_CACHE_DIR      = '/var/jenkins_home/trivy-cache'
+        TRIVY_IMAGE_CACHE_DIR   = 'C:\\trivy-cache'
+        FAILURE_EMAIL_RECIPIENTS = 'oubeyd887@gmail.com'
     }
 
     stages {
         stage('Pipeline') {
-            agent any
+            agent { label "${BUILD_AGENT_LABEL}" }
             steps {
                 script {
                     checkout scm
@@ -72,17 +73,25 @@ pipeline {
                         }
 
                         stage('Build Changed CARs') {
-                            sh 'rm -rf target/dev-carbonapps && mkdir -p target/dev-carbonapps'
+                            sh 'rm -rf target/dev-carbonapps target/dev-libs && mkdir -p target/dev-carbonapps target/dev-libs && touch target/dev-libs/.dockerkeep'
 
                             def build = load 'jenkins/lib/Buildandpackage.groovy'
+                            def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
                             apis.each { api ->
                                 def car = build(api.path)
+                                miRuntimeLibs.prepare(api.path)
                                 junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
                                 archiveArtifacts artifacts: car, fingerprint: true
                                 archiveArtifacts allowEmptyArchive: true, artifacts: "apis/${api.path}/target/*.log"
                                 sh "cp '${car}' target/dev-carbonapps/"
+                                sh """
+                                    set -euo pipefail
+                                    if [ -d 'apis/${api.path}/target/mi-runtime-libs' ]; then
+                                      find 'apis/${api.path}/target/mi-runtime-libs' -name '*.jar' -exec cp {} target/dev-libs/ \\;
+                                    fi
+                                """
                             }
-                            stash name: 'dev-docker-context', includes: 'Dockerfile.dev,target/dev-carbonapps/*.car'
+                            stash name: 'dev-docker-context', includes: 'Dockerfile.dev,target/dev-carbonapps/*.car,target/dev-libs/**'
                         }
 
                         def imageTag
@@ -160,11 +169,13 @@ pipeline {
 
                             stage("Test & Package CAR: ${api.slug}") {
                                 def build = load 'jenkins/lib/Buildandpackage.groovy'
+                                def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
                                 def car = build(api.path)
+                                miRuntimeLibs.prepare(api.path)
                                 junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
                                 archiveArtifacts artifacts: car, fingerprint: true
                                 archiveArtifacts allowEmptyArchive: true, artifacts: "apis/${api.path}/target/*.log"
-                                stash name: "docker-check-${api.slug}", includes: "apis/${api.path}/deployment/docker/**,apis/${api.path}/target/*.car"
+                                stash name: "docker-check-${api.slug}", includes: "apis/${api.path}/deployment/docker/**,apis/${api.path}/target/*.car,apis/${api.path}/target/mi-runtime-libs/**"
                             }
 
                             stage("Docker Build Check: ${api.slug}") {
@@ -178,6 +189,11 @@ pipeline {
                                             New-Item -ItemType Directory -Force -Path CompositeApps | Out-Null
                                             New-Item -ItemType Directory -Force -Path resources | Out-Null
                                             Copy-Item -Path target\\*.car -Destination CompositeApps\\ -Force
+                                            New-Item -ItemType Directory -Force -Path libs | Out-Null
+                                            New-Item -ItemType File -Force -Path libs\\.dockerkeep | Out-Null
+                                            if (Test-Path target\\mi-runtime-libs) {
+                                              Copy-Item -Path target\\mi-runtime-libs\\*.jar -Destination libs\\ -Force -ErrorAction SilentlyContinue
+                                            }
                                             if (Test-Path deployment\\docker\\resources) {
                                               Copy-Item -Path deployment\\docker\\resources\\* -Destination resources\\ -Recurse -Force
                                             }
@@ -333,6 +349,35 @@ pipeline {
         }
         failure {
             echo "Failed: branch=${env.BRANCH_NAME ?: 'n/a'} commit=${env.GIT_COMMIT ?: 'n/a'}"
+            script {
+                if ((env.FAILURE_EMAIL_RECIPIENTS ?: '').trim()) {
+                    try {
+                        emailext(
+                            to: env.FAILURE_EMAIL_RECIPIENTS,
+                            subject: "[Jenkins] FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                            mimeType: 'text/html',
+                            attachLog: true,
+                            compressLog: true,
+                            body: """
+                                <p><b>WSO2 MI pipeline failed.</b></p>
+                                <p>
+                                  <b>Job:</b> ${env.JOB_NAME}<br/>
+                                  <b>Build:</b> #${env.BUILD_NUMBER}<br/>
+                                  <b>Branch:</b> ${env.BRANCH_NAME ?: 'n/a'}<br/>
+                                  <b>Commit:</b> ${env.GIT_COMMIT ?: env.SOURCE_COMMIT ?: 'n/a'}
+                                </p>
+                                <p>
+                                  Open Jenkins build:
+                                  <a href="${env.BUILD_URL}">${env.BUILD_URL}</a>
+                                </p>
+                                <p>The console log is attached.</p>
+                            """
+                        )
+                    } catch (err) {
+                        echo "Failure email could not be sent: ${err.message}"
+                    }
+                }
+            }
         }
     }
 }

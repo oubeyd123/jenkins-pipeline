@@ -1,0 +1,10 @@
+---
+key: "CustomerAPI-1.0.0"
+name : "CustomerAPI"
+displayName : "CustomerAPI"
+description: "CustomerAPI"
+version: "1.0.0"
+serviceUrl: "https://{MI_HOST}:{MI_PORT}/customer"
+definitionType: "OAS3"
+securityType: "BASIC"
+mutualSSLEnabled: false
