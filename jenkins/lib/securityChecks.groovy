@@ -2,7 +2,9 @@ def fs(String targetPath, String apiSlug = '') {
     def slug = apiSlug ?: targetPath.tokenize('/\\').takeRight(2).join('-')
     def reportDir = 'target/security-reports'
     def gitleaksJson = "${reportDir}/${slug}-gitleaks.tmp.json"
+    def gitleaksLog = "${reportDir}/${slug}-gitleaks.log"
     def trivyFsJson = "${reportDir}/${slug}-trivy-fs.tmp.json"
+    def trivyFsLog = "${reportDir}/${slug}-trivy-fs.log"
     int gitleaksStatus
     int trivyStatus
 
@@ -22,10 +24,14 @@ def fs(String targetPath, String apiSlug = '') {
           exit 1
         fi
 
-        gitleaks dir '${targetPath}' --redact --report-format json --report-path '${gitleaksJson}' --exit-code 1
+        set +e
+        gitleaks dir '${targetPath}' --redact --report-format json --report-path '${gitleaksJson}' --exit-code 1 > '${gitleaksLog}' 2>&1
+        status=\$?
+        set -e
         if [ ! -f '${gitleaksJson}' ]; then
           printf '[]\\n' > '${gitleaksJson}'
         }
+        exit \$status
         """,
         returnStatus: true
     )
@@ -34,7 +40,12 @@ def fs(String targetPath, String apiSlug = '') {
         set -euo pipefail
         TRIVY_CACHE_DIR="\${TRIVY_FS_CACHE_DIR}"
         mkdir -p "\$TRIVY_CACHE_DIR" '${reportDir}'
-        trivy fs --cache-dir "\$TRIVY_CACHE_DIR" --format json --output '${trivyFsJson}' --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,secret,misconfig '${targetPath}'
+
+        set +e
+        trivy fs --cache-dir "\$TRIVY_CACHE_DIR" --format json --output '${trivyFsJson}' --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,secret,misconfig '${targetPath}' > '${trivyFsLog}' 2>&1
+        status=\$?
+        set -e
+        exit \$status
         """,
         returnStatus: true
     )
@@ -58,11 +69,11 @@ def fs(String targetPath, String apiSlug = '') {
             [tool: 'Trivy FS', scope: 'Source/config', policy: 'HIGH/CRITICAL fail', result: statusText(trivyStatus)],
         ],
     ])
-    archiveArtifacts allowEmptyArchive: true, artifacts: "${reportDir}/*.md"
+    archiveArtifacts allowEmptyArchive: true, artifacts: "${reportDir}/*.md,${reportDir}/*.log"
     sh "rm -f '${gitleaksJson}' '${trivyFsJson}'"
 
     if (gitleaksStatus != 0 || trivyStatus != 0) {
-        error "Security filesystem scan failed for ${slug}: Gitleaks=${statusText(gitleaksStatus)}, Trivy FS=${statusText(trivyStatus)}, Secrets=${gitleaksFindings}, Critical=${trivyFindings.critical}, High=${trivyFindings.high}. Check archived report ${reportDir}/${slug}-filesystem-security-report.md"
+        error "Security filesystem scan failed for ${slug}: Gitleaks=${statusText(gitleaksStatus)}, Trivy FS=${statusText(trivyStatus)}, Secrets=${gitleaksFindings}, Critical=${trivyFindings.critical}, High=${trivyFindings.high}. Check archived files ${reportDir}/${slug}-filesystem-security-report.md and ${reportDir}/${slug}-gitleaks.log"
     }
 }
 
