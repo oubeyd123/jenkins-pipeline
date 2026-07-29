@@ -52,12 +52,15 @@ def fs(String targetPath, String apiSlug = '') {
 
     def gitleaksFindings = countGitleaksFindings(gitleaksJson)
     def trivyFindings = countTrivyFindings(trivyFsJson)
+    def policyFailed = gitleaksFindings > 0 || trivyFindings.critical > 0 || trivyFindings.high > 0
+    def gitleaksCleanButNonZero = gitleaksStatus != 0 && gitleaksFindings == 0 && fileContains(gitleaksLog, 'no leaks found')
+    def toolFailed = (gitleaksStatus != 0 && !gitleaksCleanButNonZero) || (trivyStatus != 0 && trivyFindings.critical + trivyFindings.high == 0)
 
     writeSecurityReport([
         apiSlug      : slug,
         scope        : 'filesystem',
         target       : targetPath,
-        result       : (gitleaksStatus == 0 && trivyStatus == 0) ? 'PASSED' : 'FAILED',
+        result       : (policyFailed || toolFailed) ? 'FAILED' : 'PASSED',
         findings     : [
             [name: 'Secrets', count: gitleaksFindings],
             [name: 'Critical', count: trivyFindings.critical],
@@ -72,7 +75,7 @@ def fs(String targetPath, String apiSlug = '') {
     archiveArtifacts allowEmptyArchive: true, artifacts: "${reportDir}/*.md,${reportDir}/*.log"
     sh "rm -f '${gitleaksJson}' '${trivyFsJson}'"
 
-    if (gitleaksStatus != 0 || trivyStatus != 0) {
+    if (policyFailed || toolFailed) {
         error "Security filesystem scan failed for ${slug}: Gitleaks=${statusText(gitleaksStatus)}, Trivy FS=${statusText(trivyStatus)}, Secrets=${gitleaksFindings}, Critical=${trivyFindings.critical}, High=${trivyFindings.high}. Check archived files ${reportDir}/${slug}-filesystem-security-report.md and ${reportDir}/${slug}-gitleaks.log"
     }
 }
@@ -209,6 +212,10 @@ def countLiteral(String content, String needle) {
         index = content.indexOf(needle, index + needle.length())
     }
     return count
+}
+
+def fileContains(String file, String needle) {
+    return fileExists(file) && readFile(file).contains(needle)
 }
 
 return this
