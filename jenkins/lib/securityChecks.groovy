@@ -22,7 +22,7 @@ def fs(String targetPath, String apiSlug = '') {
           exit 1
         fi
 
-        gitleaks detect --source '${targetPath}' --redact --report-format json --report-path '${gitleaksJson}' --exit-code 1
+        gitleaks dir '${targetPath}' --redact --report-format json --report-path '${gitleaksJson}' --exit-code 1
         if [ ! -f '${gitleaksJson}' ]; then
           printf '[]\\n' > '${gitleaksJson}'
         }
@@ -62,7 +62,7 @@ def fs(String targetPath, String apiSlug = '') {
     sh "rm -f '${gitleaksJson}' '${trivyFsJson}'"
 
     if (gitleaksStatus != 0 || trivyStatus != 0) {
-        error "Security filesystem scan failed for ${slug}"
+        error "Security filesystem scan failed for ${slug}: Gitleaks=${statusText(gitleaksStatus)}, Trivy FS=${statusText(trivyStatus)}, Secrets=${gitleaksFindings}, Critical=${trivyFindings.critical}, High=${trivyFindings.high}. Check archived report ${reportDir}/${slug}-filesystem-security-report.md"
     }
 }
 
