@@ -34,7 +34,21 @@ def call(Map cfg) {
         \$contexts = Get-ChildItem -Path \$apiDir -Filter '*.xml' -Recurse |
           ForEach-Object {
             [xml]\$doc = Get-Content -LiteralPath \$_.FullName
-            \$doc.api.context
+            \$context = \$doc.api.context
+            foreach (\$resource in \$doc.api.resource) {
+              \$uri = \$resource.'uri-template'
+              if ([string]::IsNullOrWhiteSpace(\$uri) -or \$uri -eq '/') {
+                \$path = \$context
+              } else {
+                \$path = \$context + \$uri
+              }
+
+              foreach (\$method in (\$resource.methods -split '\\s+')) {
+                if (-not [string]::IsNullOrWhiteSpace(\$method)) {
+                  \$method.ToUpperInvariant() + '|' + \$path
+                }
+              }
+            }
           } |
           Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) } |
           Sort-Object -Unique
@@ -59,23 +73,33 @@ def runSmokeContexts(String apiSlug, String baseUrl, String contexts) {
 ${contexts}
 '@ -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) }
 
-        foreach (\$context in \$contexts) {
+        foreach (\$target in \$contexts) {
+          \$parts = \$target -split '\\|', 2
+          if (\$parts.Count -eq 2) {
+            \$method = \$parts[0].Trim().ToUpperInvariant()
+            \$context = \$parts[1].Trim()
+          } else {
+            \$method = 'GET'
+            \$context = \$target.Trim()
+          }
+
           \$url = '${baseUrl}' + \$context
-          \$slashUrl = \$url + '/'
           \$passed = \$false
 
           for (\$attempt = 1; \$attempt -le 24; \$attempt++) {
-            foreach (\$candidate in @(\$url, \$slashUrl)) {
-              \$status = curl.exe --silent --show-error --output NUL --write-out '%{http_code}' "\$candidate"
-              if (\$LASTEXITCODE -ne 0) {
-                \$status = '000'
-              }
+            if (\$method -in @('POST', 'PUT', 'PATCH')) {
+              \$status = curl.exe -X \$method --silent --show-error --output NUL --write-out '%{http_code}' -H 'Content-Type: application/json' -d '{}' "\$url"
+            } else {
+              \$status = curl.exe -X \$method --silent --show-error --output NUL --write-out '%{http_code}' "\$url"
+            }
+            if (\$LASTEXITCODE -ne 0) {
+              \$status = '000'
+            }
 
-              Write-Host "Smoke testing \$candidate returned HTTP \$status (attempt \$attempt/24)"
-              if (\$status -match '^[23]') {
-                \$passed = \$true
-                break
-              }
+            Write-Host "Smoke testing \$method \$url returned HTTP \$status (attempt \$attempt/24)"
+            if (\$status -match '^[23]') {
+              \$passed = \$true
+              break
             }
 
             if (\$passed) {
@@ -87,7 +111,7 @@ ${contexts}
 
           if (-not \$passed) {
             docker logs --tail 200 '${apiSlug}'
-            throw "Smoke test failed for context \$context"
+            throw "Smoke test failed for \$method \$context"
           }
         }
     """
