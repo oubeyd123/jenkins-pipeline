@@ -42,7 +42,7 @@ def fs(String targetPath, String apiSlug = '') {
         mkdir -p "\$TRIVY_CACHE_DIR" '${reportDir}'
 
         set +e
-        trivy fs --cache-dir "\$TRIVY_CACHE_DIR" --format json --output '${trivyFsJson}' --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,secret,misconfig '${targetPath}' > '${trivyFsLog}' 2>&1
+        trivy fs --cache-dir "\$TRIVY_CACHE_DIR" --format json --output '${trivyFsJson}' --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,misconfig '${targetPath}' > '${trivyFsLog}' 2>&1
         status=\$?
         set -e
         exit \$status
@@ -69,7 +69,7 @@ def fs(String targetPath, String apiSlug = '') {
         ],
         checks       : [
             [tool: 'Gitleaks', scope: 'Source secrets', policy: 'No secrets allowed', result: statusText(gitleaksStatus)],
-            [tool: 'Trivy FS', scope: 'Source/config', policy: 'HIGH/CRITICAL fail', result: statusText(trivyStatus)],
+            [tool: 'Trivy FS', scope: 'Source vulnerabilities/misconfigurations', policy: 'HIGH/CRITICAL fail', result: statusText(trivyStatus)],
         ],
     ])
     archiveArtifacts allowEmptyArchive: true, artifacts: "${reportDir}/*.md,${reportDir}/*.log"
