@@ -131,13 +131,23 @@ pipeline {
                         }
 
                         stage('Smoke Test Changed APIs') {
-                            def smokeContexts = sh(
+                            def smokeTargets = sh(
                                 script: """
                                     for api_path in ${apis.collect { "'apis/${it.path}/src/main/wso2mi/artifacts/apis'" }.join(' ')}; do
-                                      find "\$api_path" -name '*.xml' -print0
-                                    done |
-                                      xargs -0 -r sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' |
-                                      sort -u
+                                      for api_file in \$(find "\$api_path" -name '*.xml'); do
+                                        context=\$(sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' "\$api_file" | head -n1)
+                                        sed -n 's/.*<resource[^>]* methods="\\([^"]*\\)"[^>]* uri-template="\\([^"]*\\)".*/\\1|\\2/p' "\$api_file" |
+                                        while IFS='|' read -r methods uri; do
+                                          for method in \$methods; do
+                                            if [ "\$uri" = "/" ] || [ -z "\$uri" ]; then
+                                              printf '%s|%s\\n' "\$method" "\$context"
+                                            else
+                                              printf '%s|%s%s\\n' "\$method" "\$context" "\$uri"
+                                            fi
+                                          done
+                                        done
+                                      done
+                                    done | sort -u
                                 """,
                                 returnStdout: true
                             ).trim()
@@ -145,7 +155,7 @@ pipeline {
                             node(env.DEV_DEPLOY_AGENT_LABEL) {
                                 smoke([
                                     apiSlug : env.DEV_CONTAINER_NAME,
-                                    contexts: smokeContexts,
+                                    contexts: smokeTargets,
                                     baseUrl : env.SMOKE_BASE_URL,
                                 ])
                             }
@@ -241,11 +251,21 @@ pipeline {
                                 }
 
                                 stage("Smoke Test Dev: ${api.slug}") {
-                                    def smokeContexts = sh(
+                                    def smokeTargets = sh(
                                         script: """
-                                            find 'apis/${api.path}/src/main/wso2mi/artifacts/apis' -name '*.xml' -print0 |
-                                              xargs -0 -r sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' |
-                                              sort -u
+                                            for api_file in \$(find 'apis/${api.path}/src/main/wso2mi/artifacts/apis' -name '*.xml'); do
+                                              context=\$(sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' "\$api_file" | head -n1)
+                                              sed -n 's/.*<resource[^>]* methods="\\([^"]*\\)"[^>]* uri-template="\\([^"]*\\)".*/\\1|\\2/p' "\$api_file" |
+                                              while IFS='|' read -r methods uri; do
+                                                for method in \$methods; do
+                                                  if [ "\$uri" = "/" ] || [ -z "\$uri" ]; then
+                                                    printf '%s|%s\\n' "\$method" "\$context"
+                                                  else
+                                                    printf '%s|%s%s\\n' "\$method" "\$context" "\$uri"
+                                                  fi
+                                                done
+                                              done
+                                            done | sort -u
                                         """,
                                         returnStdout: true
                                     ).trim()
@@ -253,7 +273,7 @@ pipeline {
                                     node(env.DEV_DEPLOY_AGENT_LABEL) {
                                         smoke([
                                             apiSlug : api.slug,
-                                            contexts: smokeContexts,
+                                            contexts: smokeTargets,
                                             baseUrl : env.SMOKE_BASE_URL,
                                         ])
                                     }
@@ -317,11 +337,21 @@ pipeline {
                             }
 
                             stage("Smoke Test Production: ${api.slug}") {
-                                def smokeContexts = sh(
+                                def smokeTargets = sh(
                                     script: """
-                                        find 'apis/${api.path}/src/main/wso2mi/artifacts/apis' -name '*.xml' -print0 |
-                                          xargs -0 -r sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' |
-                                          sort -u
+                                        for api_file in \$(find 'apis/${api.path}/src/main/wso2mi/artifacts/apis' -name '*.xml'); do
+                                          context=\$(sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' "\$api_file" | head -n1)
+                                          sed -n 's/.*<resource[^>]* methods="\\([^"]*\\)"[^>]* uri-template="\\([^"]*\\)".*/\\1|\\2/p' "\$api_file" |
+                                          while IFS='|' read -r methods uri; do
+                                            for method in \$methods; do
+                                              if [ "\$uri" = "/" ] || [ -z "\$uri" ]; then
+                                                printf '%s|%s\\n' "\$method" "\$context"
+                                              else
+                                                printf '%s|%s%s\\n' "\$method" "\$context" "\$uri"
+                                              fi
+                                            done
+                                          done
+                                        done | sort -u
                                     """,
                                     returnStdout: true
                                 ).trim()
@@ -329,7 +359,7 @@ pipeline {
                                 node(env.DEPLOY_AGENT_LABEL) {
                                     smoke([
                                         apiSlug : deployment.containerName,
-                                        contexts: smokeContexts,
+                                        contexts: smokeTargets,
                                         baseUrl : deployment.baseUrl,
                                     ])
                                 }
