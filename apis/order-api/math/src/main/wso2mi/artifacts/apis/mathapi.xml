@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+    <api context="/mathapi" name="mathapi" xmlns="http://ws.apache.org/ns/synapse">
+        <resource methods="GET" uri-template="/">
+            <inSequence>
+                <class name="com.example.CalculatorMediator"/>
+                <payloadFactory media-type="json">
+                    <format>{"result": $1}</format>
+                    <args>
+                        <arg evaluator="xml" expression="$ctx:calcResult"/>
+                    </args>
+                </payloadFactory>
+                <property name="HTTP_SC" value="200" scope="axis2"/>
+                <respond/>
+            </inSequence>
+            <faultSequence>
+            </faultSequence>
+        </resource>
+    </api>

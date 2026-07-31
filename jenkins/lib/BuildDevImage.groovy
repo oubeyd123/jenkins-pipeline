@@ -12,31 +12,17 @@ def call(Map cfg) {
         usernameVariable: 'REGISTRY_USER',
         passwordVariable: 'REGISTRY_PASSWORD'
     )]) {
-        if (isUnix()) {
-            sh """
-                set -euo pipefail
-                echo "\$REGISTRY_PASSWORD" | docker login '${registryHost}' --username "\$REGISTRY_USER" --password-stdin
-                docker build \
-                  --label org.opencontainers.image.revision='${commitSha}' \
-                  --label org.opencontainers.image.version='${cfg.version}' \
-                  --label org.opencontainers.image.source='${sourceUrl ?: 'unknown'}' \
-                  -f Dockerfile.dev \
-                  -t '${imageTag}' .
-                docker push '${imageTag}'
-            """
-        } else {
-            powershell """
-                \$ErrorActionPreference = 'Stop'
-                \$env:REGISTRY_PASSWORD | docker login '${registryHost}' --username \$env:REGISTRY_USER --password-stdin
-                docker build `
-                  --label org.opencontainers.image.revision='${commitSha}' `
-                  --label org.opencontainers.image.version='${cfg.version}' `
-                  --label org.opencontainers.image.source='${sourceUrl ?: 'unknown'}' `
-                  -f Dockerfile.dev `
-                  -t '${imageTag}' .
-                docker push '${imageTag}'
-            """
-        }
+        powershell """
+            \$ErrorActionPreference = 'Stop'
+            \$env:REGISTRY_PASSWORD | docker login '${registryHost}' --username \$env:REGISTRY_USER --password-stdin
+            docker build `
+              --label org.opencontainers.image.revision='${commitSha}' `
+              --label org.opencontainers.image.version='${cfg.version}' `
+              --label org.opencontainers.image.source='${sourceUrl ?: 'unknown'}' `
+              -f Dockerfile.dev `
+              -t '${imageTag}' .
+            docker push '${imageTag}'
+        """
     }
 
 
@@ -44,18 +30,10 @@ def call(Map cfg) {
 }
 
 def commandOutput(String command) {
-    if (isUnix()) {
-        return sh(script: command, returnStdout: true).trim()
-    }
-
     return powershell(script: command, returnStdout: true).trim()
 }
 
 def remoteUrl() {
-    if (isUnix()) {
-        return sh(script: 'git config --get remote.origin.url || true', returnStdout: true).trim()
-    }
-
     return powershell(
         script: '''
             $url = git config --get remote.origin.url
