@@ -30,7 +30,7 @@ def fs(String targetPath, String apiSlug = '') {
         set -e
         if [ ! -f '${gitleaksJson}' ]; then
           printf '[]\\n' > '${gitleaksJson}'
-        }
+        fi
         exit \$status
         """,
         returnStatus: true
