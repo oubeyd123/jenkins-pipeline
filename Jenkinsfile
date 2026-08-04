@@ -7,28 +7,15 @@ pipeline {
         timestamps()
     }
 
-    environment {
-        REGISTRY               = 'docker.io/oubeyd' 
-        REGISTRY_CRED_ID       = '4865805f-a74b-4c16-a608-99d6194055bc'           
-        GIT_CRED_ID            = 'github-token'
-        BUILD_AGENT_LABEL      = 'built-in'
-        DEV_DEPLOY_AGENT_LABEL = 'wso2-dev-server'              
-        DEPLOY_AGENT_LABEL     = 'wso2-dev-server'          
-        SMOKE_BASE_URL         = 'http://localhost:8290'               
-        DEV_CONTAINER_NAME     = 'wso2-mi-dev'
-        DEV_CONTAINER_PORTS    = '-p 8290:8290 -p 8253:8253 -p 9164:9164'
-        DEV_IMAGE_NAME         = 'wso2-mi-dev'
-        TRIVY_FS_CACHE_DIR      = '/var/jenkins_home/trivy-cache'
-        TRIVY_IMAGE_CACHE_DIR   = 'C:\\trivy-cache'
-        FAILURE_EMAIL_RECIPIENTS = 'oubeyd887@gmail.com'
-    }
-
     stages {
         stage('Pipeline') {
-            agent { label "${BUILD_AGENT_LABEL}" }
+            agent { label 'built-in' }
             steps {
                 script {
                     checkout scm
+                    def pipelineConfig = load 'jenkins/lib/pipelineConfig.groovy'
+                    pipelineConfig()
+
                     sh "git config user.name 'jenkins'"
                     sh "git config user.email 'jenkins@ci.local'"
                     env.SOURCE_COMMIT = env.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
@@ -131,31 +118,12 @@ pipeline {
                         }
 
                         stage('Smoke Test Changed APIs') {
-                            def smokeTargets = sh(
-                                script: """
-                                    for api_path in ${apis.collect { "'apis/${it.path}/src/main/wso2mi/artifacts/apis'" }.join(' ')}; do
-                                      for api_file in \$(find "\$api_path" -name '*.xml'); do
-                                        context=\$(sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' "\$api_file" | head -n1)
-                                        sed -n 's/.*<resource[^>]* methods="\\([^"]*\\)"[^>]* uri-template="\\([^"]*\\)".*/\\1|\\2/p' "\$api_file" |
-                                        while IFS='|' read -r methods uri; do
-                                          for method in \$methods; do
-                                            if [ "\$uri" = "/" ] || [ -z "\$uri" ]; then
-                                              printf '%s|%s\\n' "\$method" "\$context"
-                                            else
-                                              printf '%s|%s%s\\n' "\$method" "\$context" "\$uri"
-                                            fi
-                                          done
-                                        done
-                                      done
-                                    done | sort -u
-                                """,
-                                returnStdout: true
-                            ).trim()
+                            def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
                             def smoke = load 'jenkins/lib/smokeTest.groovy'
                             node(env.DEV_DEPLOY_AGENT_LABEL) {
                                 smoke([
                                     apiSlug : env.DEV_CONTAINER_NAME,
-                                    contexts: smokeTargets,
+                                    contexts: smokeTargets(apis),
                                     baseUrl : env.SMOKE_BASE_URL,
                                 ])
                             }
@@ -223,65 +191,6 @@ pipeline {
                                 return
                             }
 
-                            if (env.IS_DEVELOP == 'true') {
-                                def imageTag
-
-                                stage("Build & Push Dev Image: ${api.slug}") {
-                                    def pushImg = load 'jenkins/lib/Buildandpushimage.groovy'
-                                    imageTag = pushImg([
-                                        apiPath              : api.path,
-                                        apiSlug              : api.slug,
-                                        version              : "dev-${env.BUILD_NUMBER}",
-                                        registry             : env.REGISTRY,
-                                        registryCredentialsId: env.REGISTRY_CRED_ID,
-                                        pushLatest           : false,
-                                    ])
-                                }
-
-                                stage("Deploy Dev: ${api.slug}") {
-                                    def deploy = load 'jenkins/lib/Deploy.groovy'
-                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                        deploy([
-                                            apiSlug      : api.slug,
-                                            imageTag     : imageTag,
-                                            containerName: env.DEV_CONTAINER_NAME,
-                                            ports        : env.DEV_CONTAINER_PORTS,
-                                        ])
-                                    }
-                                }
-
-                                stage("Smoke Test Dev: ${api.slug}") {
-                                    def smokeTargets = sh(
-                                        script: """
-                                            for api_file in \$(find 'apis/${api.path}/src/main/wso2mi/artifacts/apis' -name '*.xml'); do
-                                              context=\$(sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' "\$api_file" | head -n1)
-                                              sed -n 's/.*<resource[^>]* methods="\\([^"]*\\)"[^>]* uri-template="\\([^"]*\\)".*/\\1|\\2/p' "\$api_file" |
-                                              while IFS='|' read -r methods uri; do
-                                                for method in \$methods; do
-                                                  if [ "\$uri" = "/" ] || [ -z "\$uri" ]; then
-                                                    printf '%s|%s\\n' "\$method" "\$context"
-                                                  else
-                                                    printf '%s|%s%s\\n' "\$method" "\$context" "\$uri"
-                                                  fi
-                                                done
-                                              done
-                                            done | sort -u
-                                        """,
-                                        returnStdout: true
-                                    ).trim()
-                                    def smoke = load 'jenkins/lib/smokeTest.groovy'
-                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                        smoke([
-                                            apiSlug : api.slug,
-                                            contexts: smokeTargets,
-                                            baseUrl : env.SMOKE_BASE_URL,
-                                        ])
-                                    }
-                                }
-
-                                return
-                            }
-
                             if (env.IS_RELEASE != 'true') {
                                 echo "Validation completed for branch ${env.BRANCH_NAME}; release stages only run on main"
                                 return
@@ -337,29 +246,12 @@ pipeline {
                             }
 
                             stage("Smoke Test Production: ${api.slug}") {
-                                def smokeTargets = sh(
-                                    script: """
-                                        for api_file in \$(find 'apis/${api.path}/src/main/wso2mi/artifacts/apis' -name '*.xml'); do
-                                          context=\$(sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' "\$api_file" | head -n1)
-                                          sed -n 's/.*<resource[^>]* methods="\\([^"]*\\)"[^>]* uri-template="\\([^"]*\\)".*/\\1|\\2/p' "\$api_file" |
-                                          while IFS='|' read -r methods uri; do
-                                            for method in \$methods; do
-                                              if [ "\$uri" = "/" ] || [ -z "\$uri" ]; then
-                                                printf '%s|%s\\n' "\$method" "\$context"
-                                              else
-                                                printf '%s|%s%s\\n' "\$method" "\$context" "\$uri"
-                                              fi
-                                            done
-                                          done
-                                        done | sort -u
-                                    """,
-                                    returnStdout: true
-                                ).trim()
+                                def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
                                 def smoke = load 'jenkins/lib/smokeTest.groovy'
                                 node(env.DEPLOY_AGENT_LABEL) {
                                     smoke([
                                         apiSlug : deployment.containerName,
-                                        contexts: smokeTargets,
+                                        contexts: smokeTargets(api),
                                         baseUrl : deployment.baseUrl,
                                     ])
                                 }
