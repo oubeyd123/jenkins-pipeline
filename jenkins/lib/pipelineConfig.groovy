@@ -13,12 +13,54 @@ def call(String configPath = 'jenkins/config/pipeline.properties') {
                 error "Invalid pipeline config line in ${configPath}: ${line}"
             }
 
-            def key = line.substring(0, separator).trim()
-            def value = line.substring(separator + 1).trim()
-            if (!(env[key] ?: '').trim()) {
-                env[key] = value
-            }
+            applyConfigValue(
+                line.substring(0, separator).trim(),
+                line.substring(separator + 1).trim()
+            )
         }
+}
+
+def applyConfigValue(String key, String value) {
+    switch (key) {
+        case 'REGISTRY':
+            env.REGISTRY = env.REGISTRY ?: value
+            break
+        case 'REGISTRY_CRED_ID':
+            env.REGISTRY_CRED_ID = env.REGISTRY_CRED_ID ?: value
+            break
+        case 'GIT_CRED_ID':
+            env.GIT_CRED_ID = env.GIT_CRED_ID ?: value
+            break
+        case 'DEV_DEPLOY_AGENT_LABEL':
+            env.DEV_DEPLOY_AGENT_LABEL = env.DEV_DEPLOY_AGENT_LABEL ?: value
+            break
+        case 'DEPLOY_AGENT_LABEL':
+            env.DEPLOY_AGENT_LABEL = env.DEPLOY_AGENT_LABEL ?: value
+            break
+        case 'SMOKE_BASE_URL':
+            env.SMOKE_BASE_URL = env.SMOKE_BASE_URL ?: value
+            break
+        case 'DEV_CONTAINER_NAME':
+            env.DEV_CONTAINER_NAME = env.DEV_CONTAINER_NAME ?: value
+            break
+        case 'DEV_CONTAINER_PORTS':
+            env.DEV_CONTAINER_PORTS = env.DEV_CONTAINER_PORTS ?: value
+            break
+        case 'DEV_IMAGE_NAME':
+            env.DEV_IMAGE_NAME = env.DEV_IMAGE_NAME ?: value
+            break
+        case 'TRIVY_FS_CACHE_DIR':
+            env.TRIVY_FS_CACHE_DIR = env.TRIVY_FS_CACHE_DIR ?: value
+            break
+        case 'TRIVY_IMAGE_CACHE_DIR':
+            env.TRIVY_IMAGE_CACHE_DIR = env.TRIVY_IMAGE_CACHE_DIR ?: value
+            break
+        case 'FAILURE_EMAIL_RECIPIENTS':
+            env.FAILURE_EMAIL_RECIPIENTS = env.FAILURE_EMAIL_RECIPIENTS ?: value
+            break
+        default:
+            error "Unsupported pipeline config key: ${key}"
+    }
 }
 
 return this
