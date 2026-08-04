@@ -39,10 +39,14 @@ def fs(String targetPath, String apiSlug = '') {
         script: """
         set -euo pipefail
         TRIVY_CACHE_DIR="\${TRIVY_FS_CACHE_DIR}"
+        TRIVY_UPDATE_FLAGS=""
+        if [ "\${TRIVY_SKIP_DB_UPDATE:-false}" = "true" ]; then
+          TRIVY_UPDATE_FLAGS="--skip-db-update --skip-java-db-update"
+        fi
         mkdir -p "\$TRIVY_CACHE_DIR" '${reportDir}'
 
         set +e
-        trivy fs --cache-dir "\$TRIVY_CACHE_DIR" --format json --output '${trivyFsJson}' --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,misconfig '${targetPath}' > '${trivyFsLog}' 2>&1
+        trivy fs --cache-dir "\$TRIVY_CACHE_DIR" \$TRIVY_UPDATE_FLAGS --timeout "\${TRIVY_TIMEOUT:-5m}" --format json --output '${trivyFsJson}' --exit-code 1 --severity HIGH,CRITICAL --scanners vuln,misconfig '${targetPath}' > '${trivyFsLog}' 2>&1
         status=\$?
         set -e
         exit \$status
@@ -91,6 +95,10 @@ def image(String imageRef, String apiSlug = '', String failSeverity = 'CRITICAL'
         script: """
         \$ErrorActionPreference = 'Stop'
         \$trivyCacheDir = \$env:TRIVY_IMAGE_CACHE_DIR
+        \$trivyUpdateFlags = @()
+        if (\$env:TRIVY_SKIP_DB_UPDATE -eq 'true') {
+          \$trivyUpdateFlags = @('--skip-db-update', '--skip-java-db-update')
+        }
         New-Item -ItemType Directory -Force -Path \$trivyCacheDir | Out-Null
         New-Item -ItemType Directory -Force -Path '${reportDir}' | Out-Null
 
@@ -98,7 +106,7 @@ def image(String imageRef, String apiSlug = '', String failSeverity = 'CRITICAL'
           throw 'trivy is required for image scanning but is not installed on the Windows Docker agent'
         }
 
-        trivy image --cache-dir \$trivyCacheDir --scanners vuln --format json --output '${trivyImageJson}' --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
+        trivy image --cache-dir \$trivyCacheDir @trivyUpdateFlags --timeout "\$env:TRIVY_TIMEOUT" --scanners vuln --format json --output '${trivyImageJson}' --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
         """,
         returnStatus: true
     )
@@ -106,7 +114,11 @@ def image(String imageRef, String apiSlug = '', String failSeverity = 'CRITICAL'
         script: """
         \$ErrorActionPreference = 'Stop'
         \$trivyCacheDir = \$env:TRIVY_IMAGE_CACHE_DIR
-        trivy image --cache-dir \$trivyCacheDir --scanners vuln --exit-code 1 --severity '${failSeverity}' '${imageRef}'
+        \$trivyUpdateFlags = @()
+        if (\$env:TRIVY_SKIP_DB_UPDATE -eq 'true') {
+          \$trivyUpdateFlags = @('--skip-db-update', '--skip-java-db-update')
+        }
+        trivy image --cache-dir \$trivyCacheDir @trivyUpdateFlags --timeout "\$env:TRIVY_TIMEOUT" --scanners vuln --exit-code 1 --severity '${failSeverity}' '${imageRef}'
         """,
         returnStatus: true
     )

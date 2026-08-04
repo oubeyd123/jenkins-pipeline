@@ -55,6 +55,12 @@ def applyConfigValue(String key, String value) {
         case 'TRIVY_IMAGE_CACHE_DIR':
             env.TRIVY_IMAGE_CACHE_DIR = env.TRIVY_IMAGE_CACHE_DIR ?: value
             break
+        case 'TRIVY_SKIP_DB_UPDATE':
+            env.TRIVY_SKIP_DB_UPDATE = env.TRIVY_SKIP_DB_UPDATE ?: value
+            break
+        case 'TRIVY_TIMEOUT':
+            env.TRIVY_TIMEOUT = env.TRIVY_TIMEOUT ?: value
+            break
         case 'FAILURE_EMAIL_RECIPIENTS':
             env.FAILURE_EMAIL_RECIPIENTS = env.FAILURE_EMAIL_RECIPIENTS ?: value
             break
