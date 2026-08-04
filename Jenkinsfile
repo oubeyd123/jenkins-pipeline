@@ -8,19 +8,7 @@ pipeline {
     }
 
     environment {
-        REGISTRY               = 'docker.io/oubeyd' 
-        REGISTRY_CRED_ID       = '4865805f-a74b-4c16-a608-99d6194055bc'           
-        GIT_CRED_ID            = 'github-token'
-        BUILD_AGENT_LABEL      = 'built-in'
-        DEV_DEPLOY_AGENT_LABEL = 'wso2-dev-server'              
-        DEPLOY_AGENT_LABEL     = 'wso2-dev-server'          
-        SMOKE_BASE_URL         = 'http://localhost:8290'               
-        DEV_CONTAINER_NAME     = 'wso2-mi-dev'
-        DEV_CONTAINER_PORTS    = '-p 8290:8290 -p 8253:8253 -p 9164:9164'
-        DEV_IMAGE_NAME         = 'wso2-mi-dev'
-        TRIVY_FS_CACHE_DIR      = '/var/jenkins_home/trivy-cache'
-        TRIVY_IMAGE_CACHE_DIR   = 'C:\\trivy-cache'
-        FAILURE_EMAIL_RECIPIENTS = 'oubeyd887@gmail.com'
+        BUILD_AGENT_LABEL = 'built-in'
     }
 
     stages {
@@ -29,6 +17,9 @@ pipeline {
             steps {
                 script {
                     checkout scm
+                    def pipelineConfig = load 'jenkins/lib/pipelineConfig.groovy'
+                    pipelineConfig()
+
                     sh "git config user.name 'jenkins'"
                     sh "git config user.email 'jenkins@ci.local'"
                     env.SOURCE_COMMIT = env.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
@@ -53,31 +44,28 @@ pipeline {
                     echo "Changed APIs: ${apis.collect { it.slug }.join(', ')}"
 
                     if (env.IS_DEVELOP == 'true') {
-                        stage('Validate Changed APIs') {
-                            def quality = load 'jenkins/lib/qualityChecks.groovy'
-                            apis.each { api ->
+                        apis.each { api ->
+                            stage("Validate: ${api.slug}") {
+                                def quality = load 'jenkins/lib/qualityChecks.groovy'
                                 quality(api.path)
                             }
-                        }
 
-                        stage('Validate Runtime API Contexts') {
-                            def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
-                            runtimeChecks.uniqueApiContexts(apis)
-                        }
+                            stage("Validate Runtime Artifacts: ${api.slug}") {
+                                def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
+                                runtimeChecks.uniqueApiContexts([api])
+                                runtimeChecks.uniqueLocalEntries([api])
+                            }
 
-                        stage('Security Scan Changed APIs') {
-                            def security = load 'jenkins/lib/securityChecks.groovy'
-                            apis.each { api ->
+                            stage("Security Scan: ${api.slug}") {
+                                def security = load 'jenkins/lib/securityChecks.groovy'
                                 security.fs("apis/${api.path}", api.slug)
                             }
-                        }
 
-                        stage('Build Changed CARs') {
-                            sh 'rm -rf target/dev-carbonapps target/dev-libs && mkdir -p target/dev-carbonapps target/dev-libs && touch target/dev-libs/.dockerkeep'
+                            stage("Build CAR: ${api.slug}") {
+                                sh 'rm -rf target/dev-carbonapps target/dev-libs && mkdir -p target/dev-carbonapps target/dev-libs && touch target/dev-libs/.dockerkeep'
 
-                            def build = load 'jenkins/lib/Buildandpackage.groovy'
-                            def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
-                            apis.each { api ->
+                                def build = load 'jenkins/lib/Buildandpackage.groovy'
+                                def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
                                 def car = build(api.path)
                                 miRuntimeLibs.prepare(api.path)
                                 junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
@@ -90,74 +78,34 @@ pipeline {
                                       find 'apis/${api.path}/target/mi-runtime-libs' -name '*.jar' -exec cp {} target/dev-libs/ \\;
                                     fi
                                 """
+                                stash name: "dev-docker-context-${api.slug}", includes: 'Dockerfile.dev,target/dev-carbonapps/*.car,target/dev-libs/**'
                             }
-                            stash name: 'dev-docker-context', includes: 'Dockerfile.dev,target/dev-carbonapps/*.car,target/dev-libs/**'
-                        }
 
-                        def imageTag
-                        stage('Build & Push Dev MI Image') {
-                            def buildDevImage = load 'jenkins/lib/BuildDevImage.groovy'
-                            node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                deleteDir()
-                                unstash 'dev-docker-context'
-                                imageTag = buildDevImage([
-                                    imageName            : env.DEV_IMAGE_NAME,
-                                    version              : "dev-${env.BUILD_NUMBER}",
-                                    registry             : env.REGISTRY,
-                                    registryCredentialsId: env.REGISTRY_CRED_ID,
-                                    commitSha            : env.SOURCE_COMMIT,
-                                    sourceUrl            : env.SOURCE_URL,
-                                ])
+                            stage("Deploy CAR to Dev MI Container: ${api.slug}") {
+                                def deployDev = load 'jenkins/lib/DeployDevCarbonApp.groovy'
+                                node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                    deleteDir()
+                                    unstash "dev-docker-context-${api.slug}"
+                                    deployDev([
+                                        containerName: env.DEV_CONTAINER_NAME,
+                                        ports        : env.DEV_CONTAINER_PORTS,
+                                        baseImage    : env.WSO2_BASE_IMAGE,
+                                        serverHome   : env.WSO2_SERVER_HOME,
+                                    ])
+                                }
                             }
-                        }
 
-                        stage('Trivy Scan Dev Image') {
-                            def security = load 'jenkins/lib/securityChecks.groovy'
-                            node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                security.image(imageTag, env.DEV_IMAGE_NAME)
-                            }
-                        }
-
-                        stage('Deploy Dev MI Container') {
-                            def deploy = load 'jenkins/lib/Deploy.groovy'
-                            node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                deploy([
-                                    apiSlug      : env.DEV_CONTAINER_NAME,
-                                    imageTag     : imageTag,
-                                    containerName: env.DEV_CONTAINER_NAME,
-                                    ports        : env.DEV_CONTAINER_PORTS,
-                                ])
-                            }
-                        }
-
-                        stage('Smoke Test Changed APIs') {
-                            def smokeTargets = sh(
-                                script: """
-                                    for api_path in ${apis.collect { "'apis/${it.path}/src/main/wso2mi/artifacts/apis'" }.join(' ')}; do
-                                      for api_file in \$(find "\$api_path" -name '*.xml'); do
-                                        context=\$(sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' "\$api_file" | head -n1)
-                                        sed -n 's/.*<resource[^>]* methods="\\([^"]*\\)"[^>]* uri-template="\\([^"]*\\)".*/\\1|\\2/p' "\$api_file" |
-                                        while IFS='|' read -r methods uri; do
-                                          for method in \$methods; do
-                                            if [ "\$uri" = "/" ] || [ -z "\$uri" ]; then
-                                              printf '%s|%s\\n' "\$method" "\$context"
-                                            else
-                                              printf '%s|%s%s\\n' "\$method" "\$context" "\$uri"
-                                            fi
-                                          done
-                                        done
-                                      done
-                                    done | sort -u
-                                """,
-                                returnStdout: true
-                            ).trim()
-                            def smoke = load 'jenkins/lib/smokeTest.groovy'
-                            node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                smoke([
-                                    apiSlug : env.DEV_CONTAINER_NAME,
-                                    contexts: smokeTargets,
-                                    baseUrl : env.SMOKE_BASE_URL,
-                                ])
+                            stage("Smoke Test: ${api.slug}") {
+                                def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
+                                def smokeContexts = smokeTargets(api)
+                                def smoke = load 'jenkins/lib/smokeTest.groovy'
+                                node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                    smoke([
+                                        apiSlug : env.DEV_CONTAINER_NAME,
+                                        contexts: smokeContexts,
+                                        baseUrl : env.SMOKE_BASE_URL,
+                                    ])
+                                }
                             }
                         }
 
@@ -223,65 +171,6 @@ pipeline {
                                 return
                             }
 
-                            if (env.IS_DEVELOP == 'true') {
-                                def imageTag
-
-                                stage("Build & Push Dev Image: ${api.slug}") {
-                                    def pushImg = load 'jenkins/lib/Buildandpushimage.groovy'
-                                    imageTag = pushImg([
-                                        apiPath              : api.path,
-                                        apiSlug              : api.slug,
-                                        version              : "dev-${env.BUILD_NUMBER}",
-                                        registry             : env.REGISTRY,
-                                        registryCredentialsId: env.REGISTRY_CRED_ID,
-                                        pushLatest           : false,
-                                    ])
-                                }
-
-                                stage("Deploy Dev: ${api.slug}") {
-                                    def deploy = load 'jenkins/lib/Deploy.groovy'
-                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                        deploy([
-                                            apiSlug      : api.slug,
-                                            imageTag     : imageTag,
-                                            containerName: env.DEV_CONTAINER_NAME,
-                                            ports        : env.DEV_CONTAINER_PORTS,
-                                        ])
-                                    }
-                                }
-
-                                stage("Smoke Test Dev: ${api.slug}") {
-                                    def smokeTargets = sh(
-                                        script: """
-                                            for api_file in \$(find 'apis/${api.path}/src/main/wso2mi/artifacts/apis' -name '*.xml'); do
-                                              context=\$(sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' "\$api_file" | head -n1)
-                                              sed -n 's/.*<resource[^>]* methods="\\([^"]*\\)"[^>]* uri-template="\\([^"]*\\)".*/\\1|\\2/p' "\$api_file" |
-                                              while IFS='|' read -r methods uri; do
-                                                for method in \$methods; do
-                                                  if [ "\$uri" = "/" ] || [ -z "\$uri" ]; then
-                                                    printf '%s|%s\\n' "\$method" "\$context"
-                                                  else
-                                                    printf '%s|%s%s\\n' "\$method" "\$context" "\$uri"
-                                                  fi
-                                                done
-                                              done
-                                            done | sort -u
-                                        """,
-                                        returnStdout: true
-                                    ).trim()
-                                    def smoke = load 'jenkins/lib/smokeTest.groovy'
-                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                        smoke([
-                                            apiSlug : api.slug,
-                                            contexts: smokeTargets,
-                                            baseUrl : env.SMOKE_BASE_URL,
-                                        ])
-                                    }
-                                }
-
-                                return
-                            }
-
                             if (env.IS_RELEASE != 'true') {
                                 echo "Validation completed for branch ${env.BRANCH_NAME}; release stages only run on main"
                                 return
@@ -337,29 +226,13 @@ pipeline {
                             }
 
                             stage("Smoke Test Production: ${api.slug}") {
-                                def smokeTargets = sh(
-                                    script: """
-                                        for api_file in \$(find 'apis/${api.path}/src/main/wso2mi/artifacts/apis' -name '*.xml'); do
-                                          context=\$(sed -n 's/.*<api[^>]* context="\\([^"]*\\)".*/\\1/p' "\$api_file" | head -n1)
-                                          sed -n 's/.*<resource[^>]* methods="\\([^"]*\\)"[^>]* uri-template="\\([^"]*\\)".*/\\1|\\2/p' "\$api_file" |
-                                          while IFS='|' read -r methods uri; do
-                                            for method in \$methods; do
-                                              if [ "\$uri" = "/" ] || [ -z "\$uri" ]; then
-                                                printf '%s|%s\\n' "\$method" "\$context"
-                                              else
-                                                printf '%s|%s%s\\n' "\$method" "\$context" "\$uri"
-                                              fi
-                                            done
-                                          done
-                                        done | sort -u
-                                    """,
-                                    returnStdout: true
-                                ).trim()
+                                def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
+                                def smokeContexts = smokeTargets(api)
                                 def smoke = load 'jenkins/lib/smokeTest.groovy'
                                 node(env.DEPLOY_AGENT_LABEL) {
                                     smoke([
                                         apiSlug : deployment.containerName,
-                                        contexts: smokeTargets,
+                                        contexts: smokeContexts,
                                         baseUrl : deployment.baseUrl,
                                     ])
                                 }
