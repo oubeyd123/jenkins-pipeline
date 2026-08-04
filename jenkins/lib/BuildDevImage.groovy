@@ -3,6 +3,8 @@ def call(Map cfg) {
     def shortSha = commitSha.take(8)
     def sourceUrl = cfg.get('sourceUrl', env.SOURCE_URL ?: env.GIT_URL ?: remoteUrl())
     def imageName = cfg.get('imageName', 'wso2-mi-dev')
+    def baseImage = cfg.get('baseImage', 'wso2/wso2mi:4.6.0')
+    def serverHome = cfg.get('serverHome', '/home/wso2carbon/wso2mi-4.6.0')
     def imageRef = "${cfg.registry}/${imageName}"
     def imageTag = "${imageRef}:${cfg.version}-${shortSha}"
     def registryHost = cfg.registry.tokenize('/')[0]
@@ -16,6 +18,8 @@ def call(Map cfg) {
             \$ErrorActionPreference = 'Stop'
             \$env:REGISTRY_PASSWORD | docker login '${registryHost}' --username \$env:REGISTRY_USER --password-stdin
             docker build `
+              --build-arg BASE_IMAGE='${baseImage}' `
+              --build-arg WSO2_SERVER_HOME='${serverHome}' `
               --label org.opencontainers.image.revision='${commitSha}' `
               --label org.opencontainers.image.version='${cfg.version}' `
               --label org.opencontainers.image.source='${sourceUrl ?: 'unknown'}' `
