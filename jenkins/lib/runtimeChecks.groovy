@@ -25,4 +25,31 @@ def uniqueApiContexts(List apis) {
     """
 }
 
+def uniqueLocalEntries(List apis) {
+    def entryDirs = apis.collect { "apis/${it.path}/src/main/wso2mi/artifacts/local-entries" }
+    def quotedDirs = entryDirs.collect { "'${it}'" }.join(' ')
+
+    sh """
+        set -euo pipefail
+
+        tmp_file="\$(mktemp)"
+        for entry_dir in ${quotedDirs}; do
+          if [ -d "\$entry_dir" ]; then
+            find "\$entry_dir" -name '*.xml' -print0 |
+              xargs -0 -r sed -n 's/.*<localEntry[^>]* key="\\([^"]*\\)".*/\\1/p' >> "\$tmp_file"
+          fi
+        done
+
+        duplicates="\$(sort "\$tmp_file" | uniq -d)"
+        rm -f "\$tmp_file"
+
+        if [ -n "\$duplicates" ]; then
+          echo "Duplicate WSO2 local-entry key(s) detected in changed APIs:"
+          echo "\$duplicates"
+          echo "Each localEntry key deployed into the same MI container must be unique."
+          exit 1
+        fi
+    """
+}
+
 return this

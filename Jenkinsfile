@@ -44,31 +44,28 @@ pipeline {
                     echo "Changed APIs: ${apis.collect { it.slug }.join(', ')}"
 
                     if (env.IS_DEVELOP == 'true') {
-                        stage('Validate Changed APIs') {
-                            def quality = load 'jenkins/lib/qualityChecks.groovy'
-                            apis.each { api ->
+                        apis.each { api ->
+                            stage("Validate: ${api.slug}") {
+                                def quality = load 'jenkins/lib/qualityChecks.groovy'
                                 quality(api.path)
                             }
-                        }
 
-                        stage('Validate Runtime API Contexts') {
-                            def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
-                            runtimeChecks.uniqueApiContexts(apis)
-                        }
+                            stage("Validate Runtime Artifacts: ${api.slug}") {
+                                def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
+                                runtimeChecks.uniqueApiContexts([api])
+                                runtimeChecks.uniqueLocalEntries([api])
+                            }
 
-                        stage('Security Scan Changed APIs') {
-                            def security = load 'jenkins/lib/securityChecks.groovy'
-                            apis.each { api ->
+                            stage("Security Scan: ${api.slug}") {
+                                def security = load 'jenkins/lib/securityChecks.groovy'
                                 security.fs("apis/${api.path}", api.slug)
                             }
-                        }
 
-                        stage('Build Changed CARs') {
-                            sh 'rm -rf target/dev-carbonapps target/dev-libs && mkdir -p target/dev-carbonapps target/dev-libs && touch target/dev-libs/.dockerkeep'
+                            stage("Build CAR: ${api.slug}") {
+                                sh 'rm -rf target/dev-carbonapps target/dev-libs && mkdir -p target/dev-carbonapps target/dev-libs && touch target/dev-libs/.dockerkeep'
 
-                            def build = load 'jenkins/lib/Buildandpackage.groovy'
-                            def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
-                            apis.each { api ->
+                                def build = load 'jenkins/lib/Buildandpackage.groovy'
+                                def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
                                 def car = build(api.path)
                                 miRuntimeLibs.prepare(api.path)
                                 junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
@@ -81,58 +78,34 @@ pipeline {
                                       find 'apis/${api.path}/target/mi-runtime-libs' -name '*.jar' -exec cp {} target/dev-libs/ \\;
                                     fi
                                 """
+                                stash name: "dev-docker-context-${api.slug}", includes: 'Dockerfile.dev,target/dev-carbonapps/*.car,target/dev-libs/**'
                             }
-                            stash name: 'dev-docker-context', includes: 'Dockerfile.dev,target/dev-carbonapps/*.car,target/dev-libs/**'
-                        }
 
-                        def imageTag
-                        stage('Build & Push Dev MI Image') {
-                            def buildDevImage = load 'jenkins/lib/BuildDevImage.groovy'
-                            node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                deleteDir()
-                                unstash 'dev-docker-context'
-                                imageTag = buildDevImage([
-                                    imageName            : env.DEV_IMAGE_NAME,
-                                    version              : "dev-${env.BUILD_NUMBER}",
-                                    registry             : env.REGISTRY,
-                                    registryCredentialsId: env.REGISTRY_CRED_ID,
-                                    baseImage            : env.WSO2_BASE_IMAGE,
-                                    serverHome           : env.WSO2_SERVER_HOME,
-                                    commitSha            : env.SOURCE_COMMIT,
-                                    sourceUrl            : env.SOURCE_URL,
-                                ])
+                            stage("Deploy CAR to Dev MI Container: ${api.slug}") {
+                                def deployDev = load 'jenkins/lib/DeployDevCarbonApp.groovy'
+                                node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                    deleteDir()
+                                    unstash "dev-docker-context-${api.slug}"
+                                    deployDev([
+                                        containerName: env.DEV_CONTAINER_NAME,
+                                        ports        : env.DEV_CONTAINER_PORTS,
+                                        baseImage    : env.WSO2_BASE_IMAGE,
+                                        serverHome   : env.WSO2_SERVER_HOME,
+                                    ])
+                                }
                             }
-                        }
 
-                        stage('Trivy Scan Dev Image') {
-                            def security = load 'jenkins/lib/securityChecks.groovy'
-                            node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                security.image(imageTag, env.DEV_IMAGE_NAME)
-                            }
-                        }
-
-                        stage('Deploy Dev MI Container') {
-                            def deploy = load 'jenkins/lib/Deploy.groovy'
-                            node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                deploy([
-                                    apiSlug      : env.DEV_CONTAINER_NAME,
-                                    imageTag     : imageTag,
-                                    containerName: env.DEV_CONTAINER_NAME,
-                                    ports        : env.DEV_CONTAINER_PORTS,
-                                ])
-                            }
-                        }
-
-                        stage('Smoke Test Changed APIs') {
-                            def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
-                            def smokeContexts = smokeTargets(apis)
-                            def smoke = load 'jenkins/lib/smokeTest.groovy'
-                            node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                smoke([
-                                    apiSlug : env.DEV_CONTAINER_NAME,
-                                    contexts: smokeContexts,
-                                    baseUrl : env.SMOKE_BASE_URL,
-                                ])
+                            stage("Smoke Test: ${api.slug}") {
+                                def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
+                                def smokeContexts = smokeTargets(api)
+                                def smoke = load 'jenkins/lib/smokeTest.groovy'
+                                node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                    smoke([
+                                        apiSlug : env.DEV_CONTAINER_NAME,
+                                        contexts: smokeContexts,
+                                        baseUrl : env.SMOKE_BASE_URL,
+                                    ])
+                                }
                             }
                         }
 
