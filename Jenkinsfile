@@ -123,11 +123,12 @@ pipeline {
 
                         stage('Smoke Test Changed APIs') {
                             def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
+                            def smokeContexts = smokeTargets(apis)
                             def smoke = load 'jenkins/lib/smokeTest.groovy'
                             node(env.DEV_DEPLOY_AGENT_LABEL) {
                                 smoke([
                                     apiSlug : env.DEV_CONTAINER_NAME,
-                                    contexts: smokeTargets(apis),
+                                    contexts: smokeContexts,
                                     baseUrl : env.SMOKE_BASE_URL,
                                 ])
                             }
@@ -251,11 +252,12 @@ pipeline {
 
                             stage("Smoke Test Production: ${api.slug}") {
                                 def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
+                                def smokeContexts = smokeTargets(api)
                                 def smoke = load 'jenkins/lib/smokeTest.groovy'
                                 node(env.DEPLOY_AGENT_LABEL) {
                                     smoke([
                                         apiSlug : deployment.containerName,
-                                        contexts: smokeTargets(api),
+                                        contexts: smokeContexts,
                                         baseUrl : deployment.baseUrl,
                                     ])
                                 }
