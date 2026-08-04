@@ -33,25 +33,20 @@ def call(Map cfg) {
 
         Start-Sleep -Seconds 10
 
-        Write-Host "Cleaning old CAR files from \$containerName"
-        docker exec "\$containerName" sh -c "rm -f '\$carbonAppsDir/'*.car"
-        Start-Sleep -Seconds 5
+        Write-Host "Cleaning old CAR files and temporary CApp deployment data from \$containerName"
+        docker exec "\$containerName" sh -c "rm -f '\$carbonAppsDir/'*.car && rm -rf '${serverHome}/tmp/carbonapps/'*"
 
-        \$libsCopied = \$false
         if (Test-Path 'target\\dev-libs') {
           \$jars = Get-ChildItem -Path 'target\\dev-libs' -Filter '*.jar' -File -ErrorAction SilentlyContinue
           foreach (\$jar in \$jars) {
             Write-Host "Copying runtime library \$([System.IO.Path]::GetFileName(\$jar.FullName))"
             docker cp "\$([System.IO.Path]::GetFullPath(\$jar.FullName))" "\$containerName`:\$libsDir/"
-            \$libsCopied = \$true
           }
         }
 
-        if (\$libsCopied) {
-          Write-Host 'Runtime libraries were copied; restarting MI so the JVM loads them'
-          docker restart "\$containerName" | Out-Host
-          Start-Sleep -Seconds 15
-        }
+        Write-Host 'Restarting MI container to clear previous runtime artifact state'
+        docker restart "\$containerName" | Out-Host
+        Start-Sleep -Seconds 20
 
         \$cars = Get-ChildItem -Path 'target\\dev-carbonapps' -Filter '*.car' -File
         if (\$cars.Count -eq 0) {
