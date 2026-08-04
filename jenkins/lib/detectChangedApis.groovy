@@ -26,7 +26,14 @@ def call(String diffRange) {
               git diff --name-only '${safeDiffRange}' -- 'apis/**'
             fi |
             awk -F/ 'NF >= 4 { print \$2 "/" \$3 }' |
-            sort -u
+            sort -u |
+            while read -r api_path; do
+              if [ -f "apis/\$api_path/pom.xml" ]; then
+                printf '%s\\n' "\$api_path"
+              else
+                echo "Skipping changed path without API pom.xml: apis/\$api_path" >&2
+              fi
+            done
         """,
         returnStdout: true
     ).trim()
