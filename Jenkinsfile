@@ -54,8 +54,7 @@ pipeline {
 
                             stage("Validate Runtime Artifacts: ${api.slug}") {
                                 def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
-                                runtimeChecks.uniqueApiContexts([api])
-                                runtimeChecks.uniqueLocalEntries([api])
+                                runtimeChecks.validate([api])
                             }
 
                             stage("Security Scan: ${api.slug}") {
@@ -122,6 +121,11 @@ pipeline {
                             stage("Validate: ${api.slug}") {
                                 def quality = load 'jenkins/lib/qualityChecks.groovy'
                                 quality(api.path)
+                            }
+
+                            stage("Validate Runtime Artifacts: ${api.slug}") {
+                                def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
+                                runtimeChecks.validate([api])
                             }
 
                             stage("Security Scan: ${api.slug}") {
