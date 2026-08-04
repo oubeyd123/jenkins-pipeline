@@ -31,6 +31,9 @@ def applyConfigValue(String key, String value) {
         case 'GIT_CRED_ID':
             env.GIT_CRED_ID = env.GIT_CRED_ID ?: value
             break
+        case 'BUILD_AGENT_LABEL':
+            env.BUILD_AGENT_LABEL = env.BUILD_AGENT_LABEL ?: value
+            break
         case 'DEV_DEPLOY_AGENT_LABEL':
             env.DEV_DEPLOY_AGENT_LABEL = env.DEV_DEPLOY_AGENT_LABEL ?: value
             break

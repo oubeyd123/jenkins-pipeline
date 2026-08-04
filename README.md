@@ -17,9 +17,6 @@ apis/
 jenkins/lib/
   Groovy helper files used by Jenkinsfile
 
-monitoring/grafana/
-  Grafana dashboard JSON files
-
 Dockerfile.dev
 Jenkinsfile
 .yamllint
@@ -203,8 +200,8 @@ The project needs these containers for the full local CI/CD environment:
 ```text
 jenkins     -> Jenkins server
 nexus       -> Maven repository for custom runtime JARs
-prometheus  -> collects Jenkins metrics
-grafana     -> visual dashboard for Jenkins pipeline metrics
+prometheus  -> optional monitoring container for Jenkins metrics
+grafana     -> optional dashboard container for Jenkins metrics
 wso2-mi-dev -> created by Jenkins during develop deployments
 ```
 
@@ -644,23 +641,44 @@ Jenkins build URL
 compressed console log
 ```
 
-## Prometheus
+## Observability
 
-Jenkins exposes metrics through the Prometheus plugin.
+Monitoring is optional and separate from the delivery pipeline. Jenkins can build, scan, deploy, and smoke test APIs without Prometheus or Grafana. These tools are added only to observe the CI/CD platform itself.
 
-Jenkins metrics endpoint:
-
-```text
-http://localhost:8080/prometheus
-```
-
-Prometheus config file:
+The monitoring flow is:
 
 ```text
-C:\tmp\prometheus.yml
+Jenkins Prometheus Plugin
+  -> exposes metrics at http://localhost:8080/prometheus
+Prometheus container
+  -> scrapes Jenkins metrics
+Grafana container
+  -> reads Prometheus and displays dashboards
 ```
 
-Example:
+This monitoring setup tracks Jenkins health, not WSO2 business traffic.
+
+Useful signals:
+
+```text
+Jenkins availability
+agent online/offline status
+executor usage
+queue size
+pipeline success/failure trend
+average build duration
+plugin health
+```
+
+### Prometheus Container
+
+Create the Prometheus config on the Windows host:
+
+```powershell
+notepad C:\tmp\prometheus.yml
+```
+
+Content:
 
 ```yaml
 global:
@@ -686,23 +704,19 @@ docker run -d --name prometheus `
   prom/prometheus:latest
 ```
 
-Open Prometheus:
-
-```text
-http://localhost:9090
-```
-
-Check targets:
+Check that Jenkins is being scraped:
 
 ```text
 http://localhost:9090/targets
 ```
 
-The Jenkins target should be `UP`.
+Expected result:
 
-## Grafana
+```text
+jenkins = UP
+```
 
-Grafana displays Jenkins pipeline metrics from Prometheus.
+### Grafana Container
 
 Run Grafana:
 
@@ -727,31 +741,13 @@ Default login:
 admin / admin
 ```
 
-Add Prometheus as a data source:
+Add Prometheus as a Grafana data source:
 
 ```text
 http://host.docker.internal:9090
 ```
 
-Import the custom dashboard:
-
-```text
-monitoring/grafana/wso2-mi-jenkins-dashboard.json
-```
-
-The dashboard shows:
-
-```text
-Jenkins status
-failed pipeline runs
-queue size
-online Jenkins agents
-pipeline result trend
-average build duration
-executor usage by agent
-queue pressure
-plugin health
-```
+Dashboard creation can be done directly in Grafana UI or by importing a JSON dashboard. The dashboard is operational documentation, not a required pipeline artifact.
 
 ## Required Jenkins Credentials
 

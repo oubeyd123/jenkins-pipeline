@@ -7,9 +7,13 @@ pipeline {
         timestamps()
     }
 
+    environment {
+        BUILD_AGENT_LABEL = 'linux-build'
+    }
+
     stages {
         stage('Pipeline') {
-            agent { label 'built-in' }
+            agent { label "${BUILD_AGENT_LABEL}" }
             steps {
                 script {
                     checkout scm

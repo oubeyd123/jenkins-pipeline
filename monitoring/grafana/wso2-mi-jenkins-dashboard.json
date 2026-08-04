@@ -3,13 +3,12 @@
     {
       "name": "DS_PROMETHEUS",
       "label": "Prometheus",
-      "description": "Prometheus data source connected to Jenkins metrics",
+      "description": "Prometheus data source that scrapes Jenkins /prometheus metrics",
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
     }
   ],
-  "__elements": {},
   "__requires": [
     {
       "type": "grafana",
@@ -22,6 +21,12 @@
       "id": "prometheus",
       "name": "Prometheus",
       "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "text",
+      "name": "Text",
+      "version": ""
     },
     {
       "type": "panel",
@@ -70,6 +75,31 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "## WSO2 MI CI/CD Pipeline\\nThis dashboard monitors Jenkins, not the APIs themselves. Use it to answer four questions: Is Jenkins up? Are builds failing? Are agents available? Is the queue blocked?",
+        "mode": "markdown"
+      },
+      "pluginVersion": "10.0.0",
+      "title": "Dashboard Scope",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -110,11 +140,11 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 4,
         "x": 0,
-        "y": 0
+        "y": 3
       },
-      "id": 1,
+      "id": 2,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
@@ -144,7 +174,7 @@
           "refId": "A"
         }
       ],
-      "title": "Jenkins Status",
+      "title": "Jenkins Availability",
       "type": "stat"
     },
     {
@@ -180,79 +210,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto",
-        "wideLayout": true
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "increase(jenkins_runs_failure_total[$__range])",
-          "legendFormat": "Failures",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Failed Runs In Selected Time",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 5
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 0
+        "w": 4,
+        "x": 4,
+        "y": 3
       },
       "id": 3,
       "options": {
@@ -278,13 +238,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jenkins_queue_size_value",
-          "legendFormat": "Queue",
+          "expr": "increase(jenkins_runs_failure_total[24h])",
+          "legendFormat": "failed",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Queue Size",
+      "title": "Failed Runs Last 24h",
       "type": "stat"
     },
     {
@@ -316,9 +276,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 0
+        "w": 4,
+        "x": 8,
+        "y": 3
       },
       "id": 4,
       "options": {
@@ -344,13 +304,219 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jenkins_node_online_value",
-          "legendFormat": "Online nodes",
+          "expr": "increase(jenkins_runs_success_total[24h])",
+          "legendFormat": "successful",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Online Jenkins Agents",
+      "title": "Successful Runs Last 24h",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 3
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "jenkins_queue_size_value",
+          "legendFormat": "queue",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Queue Now",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 3
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "jenkins_node_online_value",
+          "legendFormat": "agents",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Online Agents",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 3
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "jenkins_plugins_failed",
+          "legendFormat": "failed plugins",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Failed Plugins",
       "type": "stat"
     },
     {
@@ -367,11 +533,11 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "runs",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 12,
+            "drawStyle": "bars",
+            "fillOpacity": 35,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -380,7 +546,7 @@
             },
             "insertNulls": false,
             "lineInterpolation": "linear",
-            "lineWidth": 2,
+            "lineWidth": 1,
             "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
@@ -389,7 +555,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -412,9 +578,9 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 4
+        "y": 7
       },
-      "id": 5,
+      "id": 8,
       "options": {
         "legend": {
           "calcs": [
@@ -475,6 +641,111 @@
       "fieldConfig": {
         "defaults": {
           "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "SUCCESS"
+                },
+                "1": {
+                  "color": "red",
+                  "index": 1,
+                  "text": "FAILURE"
+                },
+                "2": {
+                  "color": "orange",
+                  "index": 2,
+                  "text": "UNSTABLE"
+                },
+                "3": {
+                  "color": "gray",
+                  "index": 3,
+                  "text": "ABORTED"
+                },
+                "4": {
+                  "color": "blue",
+                  "index": 4,
+                  "text": "NOT_BUILT"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "id": 9,
+      "options": {
+        "displayMode": "lcd",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "left",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": false,
+        "sizing": "auto",
+        "valueMode": "text"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "jenkins_jenkins_builds_last_build_result_ordinal{jenkins_job=~\"$jenkins_job\"}",
+          "legendFormat": "{{jenkins_job}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Last Build Result By Branch / Job",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
             "mode": "palette-classic"
           },
           "custom": {
@@ -485,7 +756,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 15,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -533,10 +804,10 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 4
+        "x": 0,
+        "y": 15
       },
-      "id": 6,
+      "id": 10,
       "options": {
         "legend": {
           "calcs": [
@@ -565,78 +836,8 @@
           "refId": "A"
         }
       ],
-      "title": "Average Build Duration By Job",
+      "title": "Average Build Duration By Branch / Job",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 12
-      },
-      "id": 7,
-      "options": {
-        "displayMode": "gradient",
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "editorMode": "code",
-          "expr": "jenkins_jenkins_builds_last_build_result_ordinal{jenkins_job=~\"$jenkins_job\"}",
-          "legendFormat": "{{jenkins_job}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Last Build Result By Job",
-      "type": "bargauge"
     },
     {
       "datasource": {
@@ -652,7 +853,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "executors",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -694,12 +895,12 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
+        "h": 8,
         "w": 12,
         "x": 12,
-        "y": 12
+        "y": 15
       },
-      "id": 8,
+      "id": 11,
       "options": {
         "legend": {
           "calcs": [
@@ -738,7 +939,7 @@
           "refId": "B"
         }
       ],
-      "title": "Executor Usage By Agent",
+      "title": "Agent Executor Usage",
       "type": "timeseries"
     },
     {
@@ -755,11 +956,11 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "queue items",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 15,
+            "fillOpacity": 20,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -789,6 +990,14 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
               }
             ]
           },
@@ -800,9 +1009,9 @@
         "h": 7,
         "w": 12,
         "x": 0,
-        "y": 19
+        "y": 23
       },
-      "id": 9,
+      "id": 12,
       "options": {
         "legend": {
           "calcs": [
@@ -825,7 +1034,7 @@
           },
           "editorMode": "code",
           "expr": "jenkins_queue_size_value",
-          "legendFormat": "queue size",
+          "legendFormat": "total queue",
           "range": true,
           "refId": "A"
         },
@@ -836,7 +1045,7 @@
           },
           "editorMode": "code",
           "expr": "jenkins_queue_stuck_value",
-          "legendFormat": "stuck",
+          "legendFormat": "stuck queue",
           "range": true,
           "refId": "B"
         },
@@ -846,13 +1055,13 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jenkins_queue_buildable_value",
-          "legendFormat": "buildable",
+          "expr": "jenkins_queue_blocked_value",
+          "legendFormat": "blocked queue",
           "range": true,
           "refId": "C"
         }
       ],
-      "title": "Queue Pressure",
+      "title": "Queue Health",
       "type": "timeseries"
     },
     {
@@ -869,7 +1078,7 @@
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "",
+            "axisLabel": "plugins",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -903,6 +1112,14 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
               }
             ]
           },
@@ -914,9 +1131,9 @@
         "h": 7,
         "w": 12,
         "x": 12,
-        "y": 19
+        "y": 23
       },
-      "id": 10,
+      "id": 13,
       "options": {
         "legend": {
           "calcs": [
@@ -955,7 +1172,7 @@
           "refId": "B"
         }
       ],
-      "title": "Jenkins Plugin Health",
+      "title": "Jenkins Maintenance Signals",
       "type": "timeseries"
     }
   ],
@@ -973,8 +1190,8 @@
       {
         "current": {
           "selected": true,
-          "text": "wso-mi-pipeline/.*",
-          "value": "wso-mi-pipeline/.*"
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": {
           "type": "prometheus",
@@ -983,7 +1200,7 @@
         "definition": "label_values(jenkins_jenkins_builds_last_build_result_ordinal, jenkins_job)",
         "hide": 0,
         "includeAll": true,
-        "label": "Jenkins job",
+        "label": "Jenkins branch / job",
         "multi": true,
         "name": "jenkins_job",
         "options": [],
@@ -1005,8 +1222,8 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "WSO2 MI CI/CD - Jenkins Pipeline",
+  "title": "WSO2 MI CI/CD - Jenkins Operations",
   "uid": "wso2-mi-cicd-jenkins",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
