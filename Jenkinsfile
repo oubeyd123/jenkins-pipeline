@@ -45,6 +45,8 @@ pipeline {
 
                     if (env.IS_DEVELOP == 'true') {
                         apis.each { api ->
+                            echo "Develop API: slug=${api.slug} path=apis/${api.path}"
+
                             stage("Validate: ${api.slug}") {
                                 def quality = load 'jenkins/lib/qualityChecks.groovy'
                                 quality(api.path)
@@ -115,6 +117,8 @@ pipeline {
                     def branchesMap = [:]
                     apis.each { api ->
                         branchesMap[api.slug] = {
+                            echo "Pipeline API: slug=${api.slug} path=apis/${api.path}"
+
                             stage("Validate: ${api.slug}") {
                                 def quality = load 'jenkins/lib/qualityChecks.groovy'
                                 quality(api.path)
