@@ -8,7 +8,7 @@ pipeline {
     }
 
     environment {
-        BUILD_AGENT_LABEL = 'linux-build'
+        BUILD_AGENT_LABEL = 'built-in'
     }
 
     stages {
