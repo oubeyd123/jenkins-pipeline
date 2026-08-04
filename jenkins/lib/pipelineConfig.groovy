@@ -49,9 +49,6 @@ def applyConfigValue(String key, String value) {
         case 'DEV_CONTAINER_PORTS':
             env.DEV_CONTAINER_PORTS = env.DEV_CONTAINER_PORTS ?: value
             break
-        case 'DEV_IMAGE_NAME':
-            env.DEV_IMAGE_NAME = env.DEV_IMAGE_NAME ?: value
-            break
         case 'WSO2_BASE_IMAGE':
             env.WSO2_BASE_IMAGE = env.WSO2_BASE_IMAGE ?: value
             break

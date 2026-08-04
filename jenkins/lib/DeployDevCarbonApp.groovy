@@ -16,13 +16,13 @@ def call(Map cfg) {
         \$carbonAppsDir = '${carbonAppsDir}'
         \$libsDir = '${libsDir}'
 
-        \$existing = docker ps -aq -f name="^/\$containerName`$"
+        \$existing = docker ps -aq -f name="^/\$containerName`\$"
         if ([string]::IsNullOrWhiteSpace(\$existing)) {
           Write-Host "Dev MI container \$containerName does not exist; starting it from \$baseImage"
           docker pull "\$baseImage"
           docker run -d --restart unless-stopped --name "\$containerName" @portArgs "\$baseImage"
         } else {
-          \$running = docker ps -q -f name="^/\$containerName`$" -f status=running
+          \$running = docker ps -q -f name="^/\$containerName`\$" -f status=running
           if ([string]::IsNullOrWhiteSpace(\$running)) {
             Write-Host "Dev MI container \$containerName exists but is stopped; starting it"
             docker start "\$containerName" | Out-Host
@@ -64,7 +64,7 @@ def call(Map cfg) {
         }
 
         Start-Sleep -Seconds 15
-        \$running = docker ps --filter name="^/\$containerName`$" --filter status=running --format '{{.Names}}'
+        \$running = docker ps --filter name="^/\$containerName`\$" --filter status=running --format '{{.Names}}'
         if (\$running -ne \$containerName) {
           throw "Dev MI container \$containerName is not running"
         }
