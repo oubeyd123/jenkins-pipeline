@@ -96,6 +96,8 @@ pipeline {
                                     version              : "dev-${env.BUILD_NUMBER}",
                                     registry             : env.REGISTRY,
                                     registryCredentialsId: env.REGISTRY_CRED_ID,
+                                    baseImage            : env.WSO2_BASE_IMAGE,
+                                    serverHome           : env.WSO2_SERVER_HOME,
                                     commitSha            : env.SOURCE_COMMIT,
                                     sourceUrl            : env.SOURCE_URL,
                                 ])

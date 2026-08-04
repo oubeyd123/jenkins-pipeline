@@ -52,6 +52,12 @@ def applyConfigValue(String key, String value) {
         case 'DEV_IMAGE_NAME':
             env.DEV_IMAGE_NAME = env.DEV_IMAGE_NAME ?: value
             break
+        case 'WSO2_BASE_IMAGE':
+            env.WSO2_BASE_IMAGE = env.WSO2_BASE_IMAGE ?: value
+            break
+        case 'WSO2_SERVER_HOME':
+            env.WSO2_SERVER_HOME = env.WSO2_SERVER_HOME ?: value
+            break
         case 'TRIVY_FS_CACHE_DIR':
             env.TRIVY_FS_CACHE_DIR = env.TRIVY_FS_CACHE_DIR ?: value
             break
