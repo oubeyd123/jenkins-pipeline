@@ -281,6 +281,7 @@ pipeline {
             script {
                 if ((env.FAILURE_EMAIL_RECIPIENTS ?: '').trim()) {
                     try {
+                        def failureDescription = "Pipeline failed with result ${currentBuild.currentResult ?: 'FAILURE'} on branch ${env.BRANCH_NAME ?: 'n/a'}."
                         emailext(
                             to: env.FAILURE_EMAIL_RECIPIENTS,
                             subject: "[Jenkins] FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
@@ -294,6 +295,9 @@ pipeline {
                                   <b>Build:</b> #${env.BUILD_NUMBER}<br/>
                                   <b>Branch:</b> ${env.BRANCH_NAME ?: 'n/a'}<br/>
                                   <b>Commit:</b> ${env.GIT_COMMIT ?: env.SOURCE_COMMIT ?: 'n/a'}
+                                </p>
+                                <p>
+                                  <b>Failure summary:</b> ${failureDescription}
                                 </p>
                                 <p>
                                   Open Jenkins build:
