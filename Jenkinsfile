@@ -151,7 +151,20 @@ pipeline {
                                     dir("apis/${api.path}") {
                                         powershell """
                                             \$ErrorActionPreference = 'Stop'
-                                            docker info | Out-Host
+                                            function Invoke-Native {
+                                              param([Parameter(ValueFromRemainingArguments = \$true)][object[]]\$Command)
+                                              \$exe = \$Command[0]
+                                              \$arguments = @()
+                                              if (\$Command.Count -gt 1) {
+                                                \$arguments = \$Command[1..(\$Command.Count - 1)]
+                                              }
+                                              & \$exe @arguments
+                                              if (\$LASTEXITCODE -ne 0) {
+                                                throw "Command failed with exit code \$LASTEXITCODE: \$Command"
+                                              }
+                                            }
+
+                                            Invoke-Native docker info
                                             New-Item -ItemType Directory -Force -Path CompositeApps | Out-Null
                                             New-Item -ItemType Directory -Force -Path resources | Out-Null
                                             Copy-Item -Path target\\*.car -Destination CompositeApps\\ -Force
@@ -164,9 +177,9 @@ pipeline {
                                               Copy-Item -Path deployment\\docker\\resources\\* -Destination resources\\ -Recurse -Force
                                             }
 
-                                            docker build `
-                                              --build-arg BASE_IMAGE=wso2/wso2mi:4.6.0 `
-                                              --build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0 `
+                                            Invoke-Native docker build `
+                                              --build-arg BASE_IMAGE='${env.WSO2_BASE_IMAGE}' `
+                                              --build-arg WSO2_SERVER_HOME='${env.WSO2_SERVER_HOME}' `
                                               -f deployment/docker/Dockerfile `
                                               -t local/${api.slug}:${env.BUILD_NUMBER} .
                                         """
@@ -210,6 +223,8 @@ pipeline {
                                         pushLatest           : true,
                                         commitSha            : env.SOURCE_COMMIT,
                                         sourceUrl            : env.SOURCE_URL,
+                                        baseImage            : env.WSO2_BASE_IMAGE,
+                                        serverHome           : env.WSO2_SERVER_HOME,
                                     ])
                                 }
                             }
