@@ -19,7 +19,9 @@ pipeline {
                     checkout scm
                     def pipelineConfig = load 'jenkins/lib/pipelineConfig.groovy'
                     pipelineConfig()
-                    echo "Pipeline config loaded: registry=${env.REGISTRY}, registryCredential=${env.REGISTRY_CRED_ID}"
+                    env.REGISTRY = 'docker.io/oubeyd'
+                    env.REGISTRY_CRED_ID = 'dockerhub-token'
+                    echo "Docker config forced: registry=${env.REGISTRY}, registryCredential=${env.REGISTRY_CRED_ID}"
 
                     sh "git config user.name 'jenkins'"
                     sh "git config user.email 'jenkins@ci.local'"
@@ -219,8 +221,8 @@ pipeline {
                                         apiPath              : api.path,
                                         apiSlug              : api.slug,
                                         version              : result.version,
-                                        registry             : env.REGISTRY,
-                                        registryCredentialsId: env.REGISTRY_CRED_ID,
+                                        registry             : 'docker.io/oubeyd',
+                                        registryCredentialsId: 'dockerhub-token',
                                         pushLatest           : true,
                                         commitSha            : env.SOURCE_COMMIT,
                                         sourceUrl            : env.SOURCE_URL,
