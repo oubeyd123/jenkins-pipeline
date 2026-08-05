@@ -12,6 +12,7 @@ def call(Map cfg) {
     def serverHome = cfg.get('serverHome', env.WSO2_SERVER_HOME ?: '/home/wso2carbon/wso2mi-4.6.0')
 
     dir("apis/${cfg.apiPath}") {
+        echo "Docker registry login: registry=${registryHost}, credential=${cfg.registryCredentialsId}"
         withCredentials([usernamePassword(
             credentialsId: cfg.registryCredentialsId,
             usernameVariable: 'REGISTRY_USER',
@@ -44,7 +45,10 @@ def call(Map cfg) {
                   Copy-Item -Path deployment\\docker\\resources\\* -Destination resources\\ -Recurse -Force
                 }
 
-                \$env:REGISTRY_PASSWORD | docker login '${registryHost}' --username \$env:REGISTRY_USER --password-stdin
+                \$dockerUser = \$env:REGISTRY_USER.Trim()
+                \$dockerPassword = \$env:REGISTRY_PASSWORD.Trim()
+                Write-Host "Docker login user: \$dockerUser"
+                \$dockerPassword | docker login '${registryHost}' --username \$dockerUser --password-stdin
                 if (\$LASTEXITCODE -ne 0) {
                   throw 'Docker login failed'
                 }
