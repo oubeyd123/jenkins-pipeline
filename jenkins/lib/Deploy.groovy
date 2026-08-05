@@ -5,32 +5,33 @@ def call(Map cfg) {
 
     powershell """
         \$ErrorActionPreference = 'Stop'
-        function Invoke-Native {
-          param([Parameter(ValueFromRemainingArguments = \$true)][object[]]\$Command)
-          \$exe = \$Command[0]
-          \$arguments = @()
-          if (\$Command.Count -gt 1) {
-            \$arguments = \$Command[1..(\$Command.Count - 1)]
-          }
-          & \$exe @arguments
+        function Invoke-Docker {
+          param([string[]]\$Arguments)
+          & docker @Arguments
           if (\$LASTEXITCODE -ne 0) {
-            throw "Command failed with exit code \${LASTEXITCODE}: \$Command"
+            throw "Docker command failed with exit code \${LASTEXITCODE}: docker \$(\$Arguments -join ' ')"
           }
         }
         \$portArgs = '${ports}' -split '\\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) }
 
-        Invoke-Native docker pull '${cfg.imageTag}'
+        Invoke-Docker -Arguments @('pull', '${cfg.imageTag}')
 
         \$existing = docker ps -aq -f name='^/${containerName}\$'
         if (-not [string]::IsNullOrWhiteSpace(\$existing)) {
           Write-Host 'Existing container found for ${containerName}; stopping and removing'
-          Invoke-Native docker stop '${containerName}'
-          Invoke-Native docker rm '${containerName}'
+          Invoke-Docker -Arguments @('stop', '${containerName}')
+          Invoke-Docker -Arguments @('rm', '${containerName}')
         } else {
           Write-Host 'No existing container named ${containerName}; nothing to remove'
         }
 
-        Invoke-Native docker run -d --restart unless-stopped --name '${containerName}' @portArgs ${envFile} '${cfg.imageTag}'
+        \$runArgs = @('run', '-d', '--restart', 'unless-stopped', '--name', '${containerName}') + \$portArgs
+        if (-not [string]::IsNullOrWhiteSpace('${envFile}')) {
+          \$runArgs += '${envFile}' -split '\\s+'
+        }
+        \$runArgs += '${cfg.imageTag}'
+        Write-Host "Running: docker \$((\$runArgs -join ' '))"
+        Invoke-Docker -Arguments \$runArgs
 
         Start-Sleep -Seconds 10
         \$running = docker ps --filter name='^/${containerName}\$' --filter status=running --format '{{.Names}}'
