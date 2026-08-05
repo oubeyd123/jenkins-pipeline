@@ -5,19 +5,33 @@ def call(Map cfg) {
 
     powershell """
         \$ErrorActionPreference = 'Stop'
+        function Invoke-Docker {
+          param([string[]]\$Arguments)
+          & docker @Arguments
+          if (\$LASTEXITCODE -ne 0) {
+            throw "Docker command failed with exit code \${LASTEXITCODE}: docker \$(\$Arguments -join ' ')"
+          }
+        }
+        \$portArgs = '${ports}' -split '\\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) }
 
-        docker pull '${cfg.imageTag}'
+        Invoke-Docker -Arguments @('pull', '${cfg.imageTag}')
 
         \$existing = docker ps -aq -f name='^/${containerName}\$'
         if (-not [string]::IsNullOrWhiteSpace(\$existing)) {
           Write-Host 'Existing container found for ${containerName}; stopping and removing'
-          docker stop '${containerName}' | Out-Host
-          docker rm '${containerName}' | Out-Host
+          Invoke-Docker -Arguments @('stop', '${containerName}')
+          Invoke-Docker -Arguments @('rm', '${containerName}')
         } else {
           Write-Host 'No existing container named ${containerName}; nothing to remove'
         }
 
-        docker run -d --restart unless-stopped --name '${containerName}' ${ports} ${envFile} '${cfg.imageTag}'
+        \$runArgs = @('run', '-d', '--restart', 'unless-stopped', '--name', '${containerName}') + \$portArgs
+        if (-not [string]::IsNullOrWhiteSpace('${envFile}')) {
+          \$runArgs += '${envFile}' -split '\\s+'
+        }
+        \$runArgs += '${cfg.imageTag}'
+        Write-Host "Running: docker \$((\$runArgs -join ' '))"
+        Invoke-Docker -Arguments \$runArgs
 
         Start-Sleep -Seconds 10
         \$running = docker ps --filter name='^/${containerName}\$' --filter status=running --format '{{.Names}}'

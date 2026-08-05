@@ -8,6 +8,8 @@ def call(Map cfg) {
     def pushLatest = cfg.get('pushLatest', false)
     def latestTag = "${imageRef}:latest"
     def registryHost = cfg.registry.tokenize('/')[0]
+    def baseImage = cfg.get('baseImage', env.WSO2_BASE_IMAGE ?: 'wso2/wso2mi:4.6.0')
+    def serverHome = cfg.get('serverHome', env.WSO2_SERVER_HOME ?: '/home/wso2carbon/wso2mi-4.6.0')
 
     dir("apis/${cfg.apiPath}") {
         withCredentials([usernamePassword(
@@ -17,6 +19,19 @@ def call(Map cfg) {
         )]) {
             powershell """
                 \$ErrorActionPreference = 'Stop'
+                function Invoke-Native {
+                  param([Parameter(ValueFromRemainingArguments = \$true)][object[]]\$Command)
+                  \$exe = \$Command[0]
+                  \$arguments = @()
+                  if (\$Command.Count -gt 1) {
+                    \$arguments = \$Command[1..(\$Command.Count - 1)]
+                  }
+                  & \$exe @arguments
+                  if (\$LASTEXITCODE -ne 0) {
+                    throw "Command failed with exit code \${LASTEXITCODE}: \$Command"
+                  }
+                }
+
                 New-Item -ItemType Directory -Force -Path CompositeApps | Out-Null
                 New-Item -ItemType Directory -Force -Path resources | Out-Null
                 New-Item -ItemType Directory -Force -Path libs | Out-Null
@@ -30,16 +45,20 @@ def call(Map cfg) {
                 }
 
                 \$env:REGISTRY_PASSWORD | docker login '${registryHost}' --username \$env:REGISTRY_USER --password-stdin
-                docker build `
+                if (\$LASTEXITCODE -ne 0) {
+                  throw 'Docker login failed'
+                }
+
+                Invoke-Native docker build `
                   --label org.opencontainers.image.revision='${commitSha}' `
                   --label org.opencontainers.image.version='${cfg.version}' `
                   --label org.opencontainers.image.source='${sourceUrl ?: 'unknown'}' `
-                  --build-arg BASE_IMAGE=wso2/wso2mi:4.6.0 `
-                  --build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0 `
+                  --build-arg BASE_IMAGE='${baseImage}' `
+                  --build-arg WSO2_SERVER_HOME='${serverHome}' `
                   -f deployment/docker/Dockerfile `
                   -t '${imageTag}' .
-                docker push '${imageTag}'
-                ${pushLatest ? "docker tag '${imageTag}' '${latestTag}'\ndocker push '${latestTag}'" : ""}
+                Invoke-Native docker push '${imageTag}'
+                ${pushLatest ? "Invoke-Native docker tag '${imageTag}' '${latestTag}'\nInvoke-Native docker push '${latestTag}'" : ""}
             """
         }
     }
