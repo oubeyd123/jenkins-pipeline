@@ -19,6 +19,7 @@ pipeline {
                     checkout scm
                     def pipelineConfig = load 'jenkins/lib/pipelineConfig.groovy'
                     pipelineConfig()
+                    echo "Pipeline config loaded: registry=${env.REGISTRY}, registryCredential=${env.REGISTRY_CRED_ID}"
 
                     sh "git config user.name 'jenkins'"
                     sh "git config user.email 'jenkins@ci.local'"
