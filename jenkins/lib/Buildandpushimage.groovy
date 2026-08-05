@@ -13,11 +13,7 @@ def call(Map cfg) {
 
     dir("apis/${cfg.apiPath}") {
         echo "Docker registry login: registry=${registryHost}, credential=${cfg.registryCredentialsId}"
-        withCredentials([usernamePassword(
-            credentialsId: cfg.registryCredentialsId,
-            usernameVariable: 'REGISTRY_USER',
-            passwordVariable: 'REGISTRY_PASSWORD'
-        )]) {
+        withCredentials([string(credentialsId: cfg.registryCredentialsId, variable: 'DOCKERHUB_TOKEN')]) {
             powershell """
                 \$ErrorActionPreference = 'Stop'
                 function Invoke-Native {
@@ -45,8 +41,8 @@ def call(Map cfg) {
                   Copy-Item -Path deployment\\docker\\resources\\* -Destination resources\\ -Recurse -Force
                 }
 
-                \$dockerUser = \$env:REGISTRY_USER.Trim()
-                \$dockerPassword = \$env:REGISTRY_PASSWORD.Trim()
+                \$dockerUser = 'oubeyd'
+                \$dockerPassword = \$env:DOCKERHUB_TOKEN.Trim()
                 Write-Host "Docker login user: \$dockerUser"
                 \$dockerPassword | docker login '${registryHost}' --username \$dockerUser --password-stdin
                 if (\$LASTEXITCODE -ne 0) {
