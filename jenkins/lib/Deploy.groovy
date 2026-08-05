@@ -14,7 +14,7 @@ def call(Map cfg) {
           }
           & \$exe @arguments
           if (\$LASTEXITCODE -ne 0) {
-            throw "Command failed with exit code \$LASTEXITCODE: \$Command"
+            throw "Command failed with exit code \${LASTEXITCODE}: \$Command"
           }
         }
         \$portArgs = '${ports}' -split '\\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) }
