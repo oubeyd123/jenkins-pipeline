@@ -49,6 +49,8 @@ pipeline {
                     if (env.IS_DEVELOP == 'true') {
                         apis.each { api ->
                             echo "Develop API: slug=${api.slug} path=apis/${api.path}"
+                            def devContainerName = "${env.DEV_CONTAINER_NAME}-${api.slug}-${env.BUILD_NUMBER}"
+                            def devDeployment
 
                             stage("Validate: ${api.slug}") {
                                 def quality = load 'jenkins/lib/qualityChecks.groovy'
@@ -85,30 +87,38 @@ pipeline {
                                 stash name: "dev-docker-context-${api.slug}", includes: 'Dockerfile.dev,target/dev-carbonapps/*.car,target/dev-libs/**'
                             }
 
-                            stage("Deploy CAR to Dev MI Container: ${api.slug}") {
-                                def deployDev = load 'jenkins/lib/DeployDevCarbonApp.groovy'
-                                node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                    deleteDir()
-                                    unstash "dev-docker-context-${api.slug}"
-                                    deployDev([
-                                        containerName: env.DEV_CONTAINER_NAME,
-                                        ports        : env.DEV_CONTAINER_PORTS,
-                                        baseImage    : env.WSO2_BASE_IMAGE,
-                                        serverHome   : env.WSO2_SERVER_HOME,
-                                    ])
+                            try {
+                                stage("Deploy CAR to Dev MI Container: ${api.slug}") {
+                                    def deployDev = load 'jenkins/lib/DeployDevCarbonApp.groovy'
+                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                        deleteDir()
+                                        unstash "dev-docker-context-${api.slug}"
+                                        devDeployment = deployDev([
+                                            containerName: devContainerName,
+                                            baseImage    : env.WSO2_BASE_IMAGE,
+                                            serverHome   : env.WSO2_SERVER_HOME,
+                                        ])
+                                    }
                                 }
-                            }
 
-                            stage("Smoke Test: ${api.slug}") {
-                                def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
-                                def smokeContexts = smokeTargets(api)
-                                def smoke = load 'jenkins/lib/smokeTest.groovy'
-                                node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                    smoke([
-                                        apiSlug : env.DEV_CONTAINER_NAME,
-                                        contexts: smokeContexts,
-                                        baseUrl : env.SMOKE_BASE_URL,
-                                    ])
+                                stage("Smoke Test: ${api.slug}") {
+                                    def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
+                                    def smokeContexts = smokeTargets(api)
+                                    def smoke = load 'jenkins/lib/smokeTest.groovy'
+                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                        smoke([
+                                            apiSlug : devDeployment.containerName,
+                                            contexts: smokeContexts,
+                                            baseUrl : devDeployment.baseUrl,
+                                        ])
+                                    }
+                                }
+                            } finally {
+                                stage("Clean Dev MI Container: ${api.slug}") {
+                                    def cleanupDev = load 'jenkins/lib/CleanupDevContainer.groovy'
+                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                        cleanupDev(devContainerName)
+                                    }
                                 }
                             }
                         }

@@ -1,6 +1,5 @@
 def call(Map cfg) {
     def containerName = cfg.containerName
-    def ports = cfg.ports
     def baseImage = cfg.baseImage
     def serverHome = cfg.serverHome
     def carbonAppsDir = "${serverHome}/repository/deployment/server/carbonapps"
@@ -18,8 +17,6 @@ def call(Map cfg) {
 
         \$containerName = '${containerName}'
         \$baseImage = '${baseImage}'
-        \$ports = '${ports}'
-        \$portArgs = \$ports -split '\\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) }
         \$carbonAppsDir = '${carbonAppsDir}'
         \$libsDir = '${libsDir}'
 
@@ -42,7 +39,7 @@ def call(Map cfg) {
 
         Write-Host "Starting clean dev MI container \$containerName from \$baseImage"
         Invoke-Docker -Arguments @('pull', \$baseImage)
-        \$runArgs = @('run', '-d', '--restart', 'unless-stopped', '--name', \$containerName) + \$portArgs + @(\$baseImage)
+        \$runArgs = @('run', '-d', '--name', \$containerName, '-p', '8290', '-p', '8253', '-p', '9164', \$baseImage)
         Write-Host "Running: docker \$((\$runArgs -join ' '))"
         Invoke-Docker -Arguments \$runArgs
 
@@ -70,6 +67,27 @@ def call(Map cfg) {
           throw "Dev MI container \$containerName is not running"
         }
     """
+
+    def mappedPort = powershell(
+        script: """
+            \$mappings = docker port '${containerName}' 8290/tcp
+            foreach (\$mapping in \$mappings) {
+              if (\$mapping -match ':(\\d+)\$') {
+                Write-Output \$Matches[1]
+                break
+              }
+            }
+        """,
+        returnStdout: true
+    ).trim()
+    if (!mappedPort) {
+        error "Could not determine mapped HTTP port for dev MI container ${containerName}"
+    }
+
+    return [
+        containerName: containerName,
+        baseUrl      : "http://localhost:${mappedPort}",
+    ]
 }
 
 return this
