@@ -84,7 +84,7 @@ pipeline {
                                       find 'apis/${api.path}/target/mi-runtime-libs' -name '*.jar' -exec cp {} target/dev-libs/ \\;
                                     fi
                                 """
-                                stash name: "dev-docker-context-${api.slug}", includes: 'Dockerfile.dev,target/dev-carbonapps/*.car,target/dev-libs/**'
+                                stash name: "dev-docker-context-${api.slug}", includes: 'target/dev-carbonapps/*.car,target/dev-libs/**'
                             }
 
                             try {

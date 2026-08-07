@@ -17,9 +17,8 @@ apis/
 jenkins/lib/
   Groovy helper files used by Jenkinsfile
 
-Dockerfile.dev
-Jenkinsfile
-.yamllint
+  Jenkinsfile
+  .yamllint
 ```
 
 Each API must be placed under:
@@ -94,13 +93,13 @@ runs Gitleaks
 runs Trivy filesystem scan
 builds changed CAR files
 downloads required runtime JARs from Nexus
-builds and pushes one dev WSO2 MI image
-runs Trivy image scan
-deploys the wso2-mi-dev container
+starts one temporary WSO2 MI test container per changed API
+copies CAR/JAR files into that test container
 runs method-aware smoke tests
+removes the temporary test container
 ```
 
-The develop image is built from `Dockerfile.dev`. It contains all CAR files changed in the develop push plus any runtime JARs needed by those APIs.
+Develop does not build or push a dev Docker image. It starts temporary containers from the base `wso2/wso2mi:4.6.0` image and copies the changed API CAR/JAR files into them for smoke testing.
 
 ### Main Branch
 
