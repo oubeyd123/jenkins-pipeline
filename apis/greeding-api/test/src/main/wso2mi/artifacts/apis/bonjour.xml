@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- INTENTIONAL_TEST_BREAK: remove this line and the next tag after email testing -->
+<intentional-email-test-break>
 <api context="/bonjour" name="bonjour" xmlns="http://ws.apache.org/ns/synapse">
     <resource methods="GET" uri-template="/">
         <inSequence>

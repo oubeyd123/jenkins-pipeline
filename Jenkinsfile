@@ -260,7 +260,9 @@ pipeline {
                             stage("Trivy Scan Image: ${api.slug}") {
                                 def security = load 'jenkins/lib/securityChecks.groovy'
                                 node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                    security.image(imageTag, api.slug)
+                                    lock(resource: 'trivy-image-cache') {
+                                        security.image(imageTag, api.slug)
+                                    }
                                 }
                             }
 
