@@ -47,82 +47,97 @@ pipeline {
                     echo "Changed APIs: ${apis.collect { it.slug }.join(', ')}"
 
                     if (env.IS_DEVELOP == 'true') {
+                        def developBranchesMap = [:]
                         apis.each { api ->
-                            echo "Develop API: slug=${api.slug} path=apis/${api.path}"
-                            def devContainerName = "${env.DEV_CONTAINER_NAME}-${api.slug}-${env.BUILD_NUMBER}"
-                            def devDeployment
+                            developBranchesMap[api.slug] = {
+                                echo "Develop API: slug=${api.slug} path=apis/${api.path}"
+                                def devContainerName = "${env.DEV_CONTAINER_NAME}-${api.slug}-${env.BUILD_NUMBER}"
+                                def devStashDir = "target/dev-${api.slug}"
+                                def devDeployment
 
-                            stage("Validate: ${api.slug}") {
-                                def quality = load 'jenkins/lib/qualityChecks.groovy'
-                                quality(api.path)
-                            }
-
-                            stage("Validate Runtime Artifacts: ${api.slug}") {
-                                def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
-                                runtimeChecks.validate([api])
-                            }
-
-                            stage("Security Scan: ${api.slug}") {
-                                def security = load 'jenkins/lib/securityChecks.groovy'
-                                security.fs("apis/${api.path}", api.slug)
-                            }
-
-                            stage("Build CAR: ${api.slug}") {
-                                sh 'rm -rf target/dev-carbonapps target/dev-libs && mkdir -p target/dev-carbonapps target/dev-libs && touch target/dev-libs/.dockerkeep'
-
-                                def build = load 'jenkins/lib/Buildandpackage.groovy'
-                                def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
-                                def car = build(api.path)
-                                miRuntimeLibs.prepare(api.path)
-                                junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
-                                archiveArtifacts artifacts: car, fingerprint: true
-                                archiveArtifacts allowEmptyArchive: true, artifacts: "apis/${api.path}/target/*.log"
-                                sh "cp '${car}' target/dev-carbonapps/"
-                                sh """
-                                    set -euo pipefail
-                                    if [ -d 'apis/${api.path}/target/mi-runtime-libs' ]; then
-                                      find 'apis/${api.path}/target/mi-runtime-libs' -name '*.jar' -exec cp {} target/dev-libs/ \\;
-                                    fi
-                                """
-                                stash name: "dev-docker-context-${api.slug}", includes: 'target/dev-carbonapps/*.car,target/dev-libs/**'
-                            }
-
-                            try {
-                                stage("Deploy CAR to Dev MI Container: ${api.slug}") {
-                                    def deployDev = load 'jenkins/lib/DeployDevCarbonApp.groovy'
-                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                        deleteDir()
-                                        unstash "dev-docker-context-${api.slug}"
-                                        devDeployment = deployDev([
-                                            containerName: devContainerName,
-                                            baseImage    : env.WSO2_BASE_IMAGE,
-                                            serverHome   : env.WSO2_SERVER_HOME,
-                                        ])
-                                    }
+                                stage("Validate: ${api.slug}") {
+                                    def quality = load 'jenkins/lib/qualityChecks.groovy'
+                                    quality(api.path)
                                 }
 
-                                stage("Smoke Test: ${api.slug}") {
-                                    def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
-                                    def smokeContexts = smokeTargets(api)
-                                    def smoke = load 'jenkins/lib/smokeTest.groovy'
-                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                        smoke([
-                                            apiSlug : devDeployment.containerName,
-                                            contexts: smokeContexts,
-                                            baseUrl : devDeployment.baseUrl,
-                                        ])
-                                    }
+                                stage("Validate Runtime Artifacts: ${api.slug}") {
+                                    def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
+                                    runtimeChecks.validate([api])
                                 }
-                            } finally {
-                                stage("Clean Dev MI Container: ${api.slug}") {
-                                    def cleanupDev = load 'jenkins/lib/CleanupDevContainer.groovy'
-                                    node(env.DEV_DEPLOY_AGENT_LABEL) {
-                                        cleanupDev(devContainerName)
+
+                                stage("Security Scan: ${api.slug}") {
+                                    def security = load 'jenkins/lib/securityChecks.groovy'
+                                    security.fs("apis/${api.path}", api.slug)
+                                }
+
+                                stage("Build CAR: ${api.slug}") {
+                                    sh "rm -rf '${devStashDir}' && mkdir -p '${devStashDir}/dev-carbonapps' '${devStashDir}/dev-libs' && touch '${devStashDir}/dev-libs/.dockerkeep'"
+
+                                    def build = load 'jenkins/lib/Buildandpackage.groovy'
+                                    def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
+                                    def car = build(api.path)
+                                    miRuntimeLibs.prepare(api.path)
+                                    junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
+                                    archiveArtifacts artifacts: car, fingerprint: true
+                                    archiveArtifacts allowEmptyArchive: true, artifacts: "apis/${api.path}/target/*.log"
+                                    sh "cp '${car}' '${devStashDir}/dev-carbonapps/'"
+                                    sh """
+                                        set -euo pipefail
+                                        if [ -d 'apis/${api.path}/target/mi-runtime-libs' ]; then
+                                          find 'apis/${api.path}/target/mi-runtime-libs' -name '*.jar' -exec cp {} '${devStashDir}/dev-libs/' \\;
+                                        fi
+                                    """
+                                    stash name: "dev-docker-context-${api.slug}", includes: "${devStashDir}/dev-carbonapps/*.car,${devStashDir}/dev-libs/**"
+                                }
+
+                                try {
+                                    stage("Deploy CAR to Dev MI Container: ${api.slug}") {
+                                        def deployDev = load 'jenkins/lib/DeployDevCarbonApp.groovy'
+                                        node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                            ws("${env.WORKSPACE}@${api.slug}") {
+                                                deleteDir()
+                                                unstash "dev-docker-context-${api.slug}"
+                                                powershell """
+                                                    \$ErrorActionPreference = 'Stop'
+                                                    New-Item -ItemType Directory -Force -Path target\\dev-carbonapps, target\\dev-libs | Out-Null
+                                                    Copy-Item -Path '${devStashDir}\\dev-carbonapps\\*.car' -Destination target\\dev-carbonapps\\ -Force
+                                                    if (Test-Path '${devStashDir}\\dev-libs') {
+                                                      Copy-Item -Path '${devStashDir}\\dev-libs\\*.jar' -Destination target\\dev-libs\\ -Force -ErrorAction SilentlyContinue
+                                                    }
+                                                """
+                                                devDeployment = deployDev([
+                                                    containerName: devContainerName,
+                                                    baseImage    : env.WSO2_BASE_IMAGE,
+                                                    serverHome   : env.WSO2_SERVER_HOME,
+                                                ])
+                                            }
+                                        }
+                                    }
+
+                                    stage("Smoke Test: ${api.slug}") {
+                                        def smokeTargets = load 'jenkins/lib/smokeTargets.groovy'
+                                        def smokeContexts = smokeTargets(api)
+                                        def smoke = load 'jenkins/lib/smokeTest.groovy'
+                                        node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                            smoke([
+                                                apiSlug : devDeployment.containerName,
+                                                contexts: smokeContexts,
+                                                baseUrl : devDeployment.baseUrl,
+                                            ])
+                                        }
+                                    }
+                                } finally {
+                                    stage("Clean Dev MI Container: ${api.slug}") {
+                                        def cleanupDev = load 'jenkins/lib/CleanupDevContainer.groovy'
+                                        node(env.DEV_DEPLOY_AGENT_LABEL) {
+                                            cleanupDev(devContainerName)
+                                        }
                                     }
                                 }
                             }
                         }
 
+                        parallel developBranchesMap
                         return
                     }
 
