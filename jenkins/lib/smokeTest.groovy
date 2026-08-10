@@ -72,6 +72,7 @@ def runSmokeContexts(String apiSlug, String baseUrl, String contexts) {
         \$contexts = @'
 ${contexts}
 '@ -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) }
+        \$smokeBody = '{"currency":"EUR","amount":1,"customerId":"smoke-test","name":"Smoke Test"}'
 
         foreach (\$target in \$contexts) {
           \$parts = \$target -split '\\|', 2
@@ -88,7 +89,7 @@ ${contexts}
 
           for (\$attempt = 1; \$attempt -le 24; \$attempt++) {
             if (\$method -in @('POST', 'PUT', 'PATCH')) {
-              \$status = curl.exe -X \$method --silent --show-error --output NUL --write-out '%{http_code}' -H 'Content-Type: application/json' -d '{}' "\$url"
+              \$status = curl.exe -X \$method --silent --show-error --output NUL --write-out '%{http_code}' -H 'Content-Type: application/json' -d \$smokeBody "\$url"
             } else {
               \$status = curl.exe -X \$method --silent --show-error --output NUL --write-out '%{http_code}' "\$url"
             }
