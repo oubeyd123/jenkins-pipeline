@@ -88,13 +88,15 @@ def image(String imageRef, String apiSlug = '', String failSeverity = 'CRITICAL'
     def slug = apiSlug ?: imageRef.tokenize('/:').takeRight(2).join('-')
     def reportDir = 'target/security-reports'
     def trivyImageJson = "${reportDir}/${slug}-trivy-image.tmp.json"
+    def trivyImageReportLog = "${reportDir}/${slug}-trivy-image-report.log"
+    def trivyImageGateLog = "${reportDir}/${slug}-trivy-image-gate.log"
     int reportStatus
     int gateStatus
 
     reportStatus = powershell(
         script: """
         \$ErrorActionPreference = 'Stop'
-        \$trivyCacheDir = \$env:TRIVY_IMAGE_CACHE_DIR
+        \$trivyCacheDir = if (\$env:TRIVY_IMAGE_CACHE_DIR) { \$env:TRIVY_IMAGE_CACHE_DIR } else { Join-Path \$env:TEMP 'trivy-image-cache' }
         \$trivyUpdateFlags = @()
         if (\$env:TRIVY_SKIP_DB_UPDATE -eq 'true') {
           \$trivyUpdateFlags = @('--skip-db-update', '--skip-java-db-update')
@@ -106,44 +108,47 @@ def image(String imageRef, String apiSlug = '', String failSeverity = 'CRITICAL'
           throw 'trivy is required for image scanning but is not installed on the Windows Docker agent'
         }
 
-        trivy image --cache-dir \$trivyCacheDir @trivyUpdateFlags --timeout "\$env:TRIVY_TIMEOUT" --scanners vuln --format json --output '${trivyImageJson}' --exit-code 0 --severity HIGH,CRITICAL '${imageRef}'
+        trivy image --cache-dir \$trivyCacheDir @trivyUpdateFlags --skip-version-check --timeout "\$env:TRIVY_TIMEOUT" --scanners vuln --format json --output '${trivyImageJson}' --exit-code 0 --severity HIGH,CRITICAL '${imageRef}' *> '${trivyImageReportLog}'
         """,
         returnStatus: true
     )
     gateStatus = powershell(
         script: """
         \$ErrorActionPreference = 'Stop'
-        \$trivyCacheDir = \$env:TRIVY_IMAGE_CACHE_DIR
+        \$trivyCacheDir = if (\$env:TRIVY_IMAGE_CACHE_DIR) { \$env:TRIVY_IMAGE_CACHE_DIR } else { Join-Path \$env:TEMP 'trivy-image-cache' }
         \$trivyUpdateFlags = @()
         if (\$env:TRIVY_SKIP_DB_UPDATE -eq 'true') {
           \$trivyUpdateFlags = @('--skip-db-update', '--skip-java-db-update')
         }
-        trivy image --cache-dir \$trivyCacheDir @trivyUpdateFlags --timeout "\$env:TRIVY_TIMEOUT" --scanners vuln --exit-code 1 --severity '${failSeverity}' '${imageRef}'
+        trivy image --cache-dir \$trivyCacheDir @trivyUpdateFlags --skip-version-check --timeout "\$env:TRIVY_TIMEOUT" --scanners vuln --exit-code 1 --severity '${failSeverity}' '${imageRef}' *> '${trivyImageGateLog}'
         """,
         returnStatus: true
     )
 
     def trivyFindings = countTrivyFindings(trivyImageJson)
+    def policyFailed = failSeverity.tokenize(',').collect { trivyFindings[it.trim().toLowerCase()] ?: 0 }.sum() > 0
+    def toolFailed = reportStatus != 0 || (gateStatus != 0 && !policyFailed)
 
     writeSecurityReport([
         apiSlug      : slug,
         scope        : 'image',
         target       : imageRef,
-        result       : (reportStatus == 0 && gateStatus == 0) ? 'PASSED' : 'FAILED',
+        result       : (policyFailed || toolFailed) ? 'FAILED' : 'PASSED',
         findings     : [
             [name: 'Critical', count: trivyFindings.critical],
             [name: 'High', count: trivyFindings.high],
             [name: 'Policy-failing findings', count: failSeverity.tokenize(',').collect { trivyFindings[it.trim().toLowerCase()] ?: 0 }.sum() ?: 0],
         ],
         checks       : [
+            [tool: 'Trivy Image Report', scope: 'Docker image', policy: 'Generate vulnerability report', result: statusText(reportStatus)],
             [tool: 'Trivy Image', scope: 'Docker image', policy: "${failSeverity} fail", result: statusText(gateStatus)],
         ],
     ])
-    archiveArtifacts allowEmptyArchive: true, artifacts: "${reportDir}/*.md"
-    powershell "Remove-Item -LiteralPath '${trivyImageJson}' -Force"
+    archiveArtifacts allowEmptyArchive: true, artifacts: "${reportDir}/*.md,${reportDir}/*.log"
+    powershell "Remove-Item -LiteralPath '${trivyImageJson}' -Force -ErrorAction SilentlyContinue"
 
-    if (reportStatus != 0 || gateStatus != 0) {
-        error "Security image scan failed for ${slug}"
+    if (policyFailed || toolFailed) {
+        error "Security image scan failed for ${slug}: Trivy report=${statusText(reportStatus)}, Trivy gate=${statusText(gateStatus)}, Critical=${trivyFindings.critical}, High=${trivyFindings.high}. Check archived files ${reportDir}/${slug}-image-security-report.md, ${trivyImageReportLog}, and ${trivyImageGateLog}"
     }
 }
 
