@@ -16,12 +16,14 @@ def call(String apiPath) {
                 find . -name '*.yaml' \
                   ! -path './target/*' \
                   ! -path './build/*' \
+                  ! -path './tmp/*' \
                   ! -path '*/resources/metadata/*' \
                   ! -path '*/resources/api-definitions/*' \
                   -print0
                 find . -name '*.yml' \
                   ! -path './target/*' \
                   ! -path './build/*' \
+                  ! -path './tmp/*' \
                   ! -path '*/resources/metadata/*' \
                   ! -path '*/resources/api-definitions/*' \
                   -print0
