@@ -7,6 +7,7 @@ extends: default
 ignore: |
   **/target/**
   **/build/**
+  **/tmp/**
   apis/*/*/src/main/wso2mi/resources/metadata/*.yaml
   apis/*/*/src/main/wso2mi/resources/api-definitions/*.yaml
 
