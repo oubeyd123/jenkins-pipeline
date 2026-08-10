@@ -108,19 +108,24 @@ def image(String imageRef, String apiSlug = '', String failSeverity = 'CRITICAL'
           throw 'trivy is required for image scanning but is not installed on the Windows Docker agent'
         }
 
-        trivy image --cache-dir \$trivyCacheDir @trivyUpdateFlags --skip-version-check --timeout "\$env:TRIVY_TIMEOUT" --scanners vuln --format json --output '${trivyImageJson}' --exit-code 0 --severity HIGH,CRITICAL '${imageRef}' *> '${trivyImageReportLog}'
+        \$ErrorActionPreference = 'Continue'
+        & trivy image --cache-dir \$trivyCacheDir @trivyUpdateFlags --skip-version-check --timeout "\$env:TRIVY_TIMEOUT" --scanners vuln --format json --output '${trivyImageJson}' --exit-code 0 --severity HIGH,CRITICAL '${imageRef}' 2>&1 |
+          Out-File -FilePath '${trivyImageReportLog}' -Encoding utf8
+        exit \$LASTEXITCODE
         """,
         returnStatus: true
     )
     gateStatus = powershell(
         script: """
-        \$ErrorActionPreference = 'Stop'
+        \$ErrorActionPreference = 'Continue'
         \$trivyCacheDir = if (\$env:TRIVY_IMAGE_CACHE_DIR) { \$env:TRIVY_IMAGE_CACHE_DIR } else { Join-Path \$env:TEMP 'trivy-image-cache' }
         \$trivyUpdateFlags = @()
         if (\$env:TRIVY_SKIP_DB_UPDATE -eq 'true') {
           \$trivyUpdateFlags = @('--skip-db-update', '--skip-java-db-update')
         }
-        trivy image --cache-dir \$trivyCacheDir @trivyUpdateFlags --skip-version-check --timeout "\$env:TRIVY_TIMEOUT" --scanners vuln --exit-code 1 --severity '${failSeverity}' '${imageRef}' *> '${trivyImageGateLog}'
+        & trivy image --cache-dir \$trivyCacheDir @trivyUpdateFlags --skip-version-check --timeout "\$env:TRIVY_TIMEOUT" --scanners vuln --exit-code 1 --severity '${failSeverity}' '${imageRef}' 2>&1 |
+          Out-File -FilePath '${trivyImageGateLog}' -Encoding utf8
+        exit \$LASTEXITCODE
         """,
         returnStatus: true
     )
