@@ -4,6 +4,7 @@ pipeline {
     options {
         skipDefaultCheckout(true)
         disableConcurrentBuilds()
+        quietPeriod(0)
         timestamps()
     }
 
@@ -19,9 +20,7 @@ pipeline {
                     checkout scm
                     def pipelineConfig = load 'jenkins/lib/pipelineConfig.groovy'
                     pipelineConfig()
-                    env.REGISTRY = 'docker.io/oubeyd'
-                    env.REGISTRY_CRED_ID = 'dockerhub-token'
-                    echo "Docker config forced: registry=${env.REGISTRY}, registryCredential=${env.REGISTRY_CRED_ID}"
+                    echo "Docker config loaded: registry=${env.REGISTRY}, registryCredential=${env.REGISTRY_CRED_ID}"
 
                     sh "git config user.name 'jenkins'"
                     sh "git config user.email 'jenkins@ci.local'"
@@ -60,9 +59,9 @@ pipeline {
                                     quality(api.path)
                                 }
 
-                                stage("Validate Runtime Artifacts: ${api.slug}") {
-                                    def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
-                                    runtimeChecks.validate([api])
+                                stage("SonarQube Scan: ${api.slug}") {
+                                    def sonar = load 'jenkins/lib/sonarQubeScan.groovy'
+                                    sonar(apiPath: api.path, apiSlug: api.slug)
                                 }
 
                                 stage("Security Scan: ${api.slug}") {
@@ -151,9 +150,9 @@ pipeline {
                                 quality(api.path)
                             }
 
-                            stage("Validate Runtime Artifacts: ${api.slug}") {
-                                def runtimeChecks = load 'jenkins/lib/runtimeChecks.groovy'
-                                runtimeChecks.validate([api])
+                            stage("SonarQube Scan: ${api.slug}") {
+                                def sonar = load 'jenkins/lib/sonarQubeScan.groovy'
+                                sonar(apiPath: api.path, apiSlug: api.slug)
                             }
 
                             stage("Security Scan: ${api.slug}") {
@@ -246,8 +245,8 @@ pipeline {
                                         apiPath              : api.path,
                                         apiSlug              : api.slug,
                                         version              : result.version,
-                                        registry             : 'docker.io/oubeyd',
-                                        registryCredentialsId: 'dockerhub-token',
+                                        registry             : env.REGISTRY,
+                                        registryCredentialsId: env.REGISTRY_CRED_ID,
                                         pushLatest           : true,
                                         commitSha            : env.SOURCE_COMMIT,
                                         sourceUrl            : env.SOURCE_URL,

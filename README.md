@@ -1,157 +1,81 @@
-# WSO2 MI CI/CD Pipeline
+# WSO2 MI Jenkins CI/CD
 
-This repository contains a Jenkins Multibranch CI/CD pipeline for WSO2 Micro Integrator 4.6.0 projects.
+Jenkins multibranch pipeline for WSO2 Micro Integrator 4.6.0 APIs.
 
-The pipeline detects changed APIs, validates only those APIs, builds CAR files, resolves custom runtime JARs from Nexus, builds WSO2 MI Docker images, scans the source and images, deploys runtime containers, runs smoke tests, creates GitHub releases, and exposes Jenkins metrics to Prometheus and Grafana.
+The pipeline detects changed APIs, validates them, builds CAR files, scans source and Docker images, deploys containers, runs smoke tests, creates releases on `main`, and exposes Jenkins metrics to Prometheus/Grafana.
 
-## Project Structure
+## Repository Layout
 
 ```text
 apis/
-  <api-category>/
-    <api-name>/
-      src/main/wso2mi/
-      deployment/docker/Dockerfile
-      pom.xml
+  <category>/<api-name>/
+    pom.xml
+    src/main/wso2mi/
+    deployment/docker/Dockerfile
 
-jenkins/lib/
-  Groovy helper files used by Jenkinsfile
+jenkins/
+  config/pipeline.properties
+  lib/*.groovy
 
-  Jenkinsfile
-  .yamllint
+monitoring/grafana/
+  wso2-mi-jenkins-dashboard.json
 ```
 
-Each API must be placed under:
+API paths become pipeline slugs. Example:
 
 ```text
-apis/<category>/<api-name>
+apis/order-api/product-api -> order-api-product-api
 ```
 
-Example:
+The slug is used for Jenkins stages, Docker images, Git tags, GitHub releases, and archived reports.
 
-```text
-apis/order-api/product-api
-```
-
-The pipeline converts that path into a slug:
-
-```text
-order-api-product-api
-```
-
-The slug is used for Jenkins stages, Docker image names, Git tags, GitHub releases, and security report names.
-
-## Branch Workflow
-
-The expected promotion flow is:
+## Branch Flow
 
 ```text
 feature/* -> develop -> main
 ```
 
-Branch behavior:
+| Branch | Purpose | Heavy Actions |
+|--------|---------|---------------|
+| `feature/*` / PR | Fast validation before merge | no deploy, no image push |
+| `develop` | Integration test with real MI containers | deploy changed APIs to temporary containers and smoke test |
+| `main` | Release | version, tag, GitHub release, image push, image scan, deploy, smoke test |
+
+Keep long-term branches simple:
 
 ```text
-feature/* and PRs -> validate only
-develop           -> integration container deployment and smoke test
-main              -> official release, versioned image, deployment, smoke test
+main
+develop
 ```
 
-Developers push work to feature branches, open a pull request into `develop`, then promote stable work from `develop` into `main`.
+## Pipeline Stages
 
-## Pipeline Behavior
-
-### Feature Branches and Pull Requests
-
-Feature branches are used for fast validation.
-
-The pipeline:
+For each changed API, Jenkins runs:
 
 ```text
-detects changed APIs
-runs quality checks
-runs Gitleaks
-runs Trivy filesystem scan
-builds WSO2 CAR files
-checks Docker image build
-does not deploy
-does not push Docker images
-does not create releases
+Validate
+SonarQube Scan, optional
+Gitleaks + Trivy filesystem scan
+Build CAR
+Docker build check
+Release steps on main only
+Trivy image scan on main only
+Deploy
+Smoke test
+Cleanup, for develop temporary containers
 ```
 
-### Develop Branch
-
-The `develop` branch validates changed APIs in a real WSO2 MI Docker runtime.
-
-The pipeline:
+Parallel API behavior:
 
 ```text
-detects changed APIs
-runs quality checks
-checks duplicate WSO2 API contexts
-runs Gitleaks
-runs Trivy filesystem scan
-builds changed CAR files
-downloads required runtime JARs from Nexus
-starts one temporary WSO2 MI test container per changed API
-copies CAR/JAR files into that test container
-runs method-aware smoke tests
-removes the temporary test container
+Each changed API runs in its own parallel branch.
+If one API fails, the other API branches continue.
+The failed API is still marked failed in Jenkins.
 ```
 
-Develop does not build or push a dev Docker image. It starts temporary containers from the base `wso2/wso2mi:4.6.0` image and copies the changed API CAR/JAR files into them for smoke testing.
+## Required Tools
 
-### Main Branch
-
-The `main` branch creates official release outputs.
-
-The pipeline:
-
-```text
-detects changed APIs
-runs quality and security checks
-builds CAR files
-downloads required runtime JARs from Nexus
-calculates the next version
-creates a Git tag
-creates a GitHub Release
-builds and pushes a versioned Docker image
-runs Trivy image scan
-deploys a release container
-runs method-aware smoke tests
-```
-
-Release example:
-
-```text
-Git tag:      order-api-product-api-v0.1.0
-Release name: order-api-product-api v0.1.0
-Docker image: docker.io/oubeyd/order-api-product-api:v0.1.0-fa78fa3a
-```
-
-## Jenkins Agents
-
-This project uses two Jenkins execution environments.
-
-### Linux Jenkins Agent
-
-Usually the built-in Jenkins container agent.
-
-Used for:
-
-```text
-checkout
-changed API detection
-quality checks
-Maven CAR build
-Nexus dependency resolution
-Gitleaks source scanning
-Trivy filesystem scanning
-version calculation
-Git tags and GitHub releases
-```
-
-Required tools:
+Linux Jenkins side:
 
 ```text
 git
@@ -161,27 +85,10 @@ xmllint
 yamllint
 gitleaks
 trivy
+sonar-scanner, optional
 ```
 
-### Windows Docker Agent
-
-The local Windows Jenkins agent, labelled:
-
-```text
-wso2-dev-server
-```
-
-Used for:
-
-```text
-Docker build
-Docker push
-Trivy image scan
-container deployment
-smoke tests against localhost
-```
-
-Required tools:
+Windows Docker agent:
 
 ```powershell
 docker --version
@@ -190,31 +97,22 @@ java --version
 mvn --version
 ```
 
-The Windows agent must be connected before running develop or main deployments.
-
-## Required Containers
-
-The project needs these containers for the full local CI/CD environment:
+The Windows agent label is configured in:
 
 ```text
-jenkins     -> Jenkins server
-nexus       -> Maven repository for custom runtime JARs
-prometheus  -> optional monitoring container for Jenkins metrics
-grafana     -> optional dashboard container for Jenkins metrics
-wso2-mi-dev -> created by Jenkins during develop deployments
+jenkins/config/pipeline.properties
 ```
 
-The `wso2-mi-dev` container is not started manually during normal pipeline usage. Jenkins creates it during the develop branch deployment stage.
+Default:
 
-## Jenkins Container
-
-If Jenkins is already running, check it with:
-
-```powershell
-docker ps
+```text
+DEV_DEPLOY_AGENT_LABEL=wso2-dev-server
+DEPLOY_AGENT_LABEL=wso2-dev-server
 ```
 
-Typical Jenkins container command:
+## Start Required Containers
+
+### Jenkins
 
 ```powershell
 docker volume create jenkins_home
@@ -226,28 +124,22 @@ docker run -d --name jenkins `
   jenkins/jenkins:lts
 ```
 
-Open Jenkins:
+Open:
 
 ```text
 http://localhost:8080
 ```
 
-The GitHub webhook URL is:
+GitHub webhook:
 
 ```text
 http://<jenkins-url>/github-webhook/
 ```
 
-When Jenkins runs locally and GitHub must reach it, use ngrok:
+For a local Jenkins exposed through ngrok:
 
 ```powershell
 ngrok http 8080
-```
-
-Then configure GitHub webhook with:
-
-```text
-https://<ngrok-domain>/github-webhook/
 ```
 
 Use webhook events:
@@ -257,11 +149,9 @@ push
 pull_request
 ```
 
-## Nexus Container
+### Nexus
 
-Nexus is used as a Maven repository for custom JAR files required by WSO2 MI runtime.
-
-Run Nexus:
+Nexus stores custom runtime JARs used by WSO2 MI APIs.
 
 ```powershell
 docker volume create nexus-data
@@ -272,7 +162,7 @@ docker run -d --name nexus `
   sonatype/nexus3:latest
 ```
 
-Open Nexus:
+Open:
 
 ```text
 http://localhost:8081
@@ -281,397 +171,76 @@ http://localhost:8081
 Recommended repositories:
 
 ```text
-wso2-mi-libs-releases  -> Maven hosted repository for release JARs
-wso2-mi-libs-snapshots -> Maven hosted repository for snapshot JARs
+wso2-mi-libs-releases
+wso2-mi-libs-snapshots
 ```
 
-The Jenkins Maven settings file must contain credentials for these repository IDs:
+Jenkins Maven settings must contain Nexus credentials:
 
 ```text
 /var/jenkins_home/.m2/settings.xml
 ```
 
-The API `pom.xml` declares custom runtime libraries in the `mi-runtime-libs` profile. Jenkins runs that profile and copies the resolved JARs into the WSO2 MI Docker image.
+### SonarQube
 
-## Custom MI Runtime Libraries
+SonarQube is optional and disabled by default. Use it for source quality, bugs, duplicated code, maintainability, and quality gates.
 
-Use custom runtime libraries when an API needs a JAR inside the WSO2 MI runtime `/lib` directory.
-
-Common examples:
-
-```text
-custom mediators
-JDBC drivers
-third-party SDKs
-shared Java utility libraries
-```
-
-The developer declares the required JAR in the API `pom.xml`:
-
-```xml
-<profile>
-  <id>mi-runtime-libs</id>
-  <dependencies>
-    <dependency>
-      <groupId>com.example</groupId>
-      <artifactId>calculator-lib</artifactId>
-      <version>1.0.1</version>
-    </dependency>
-  </dependencies>
-</profile>
-```
-
-Jenkins downloads the JAR into:
-
-```text
-apis/<category>/<api-name>/target/mi-runtime-libs/
-```
-
-Then Docker copies it into:
-
-```text
-/home/wso2carbon/wso2mi-4.6.0/lib/
-```
-
-This makes the JAR available to the API when the WSO2 MI container starts.
-
-## WSO2 MI Docker Images
-
-The Docker images are based on:
-
-```text
-wso2/wso2mi:4.6.0
-```
-
-CAR files are copied into:
-
-```text
-/home/wso2carbon/wso2mi-4.6.0/repository/deployment/server/carbonapps/
-```
-
-Runtime JARs are copied into:
-
-```text
-/home/wso2carbon/wso2mi-4.6.0/lib/
-```
-
-When the container starts, WSO2 MI automatically deploys the CAR files.
-
-### Develop Image
-
-Develop builds one integration image:
-
-```text
-docker.io/oubeyd/wso2-mi-dev:dev-<build-number>-<commit-sha>
-```
-
-That image is deployed as:
-
-```text
-wso2-mi-dev
-```
-
-Fixed ports:
-
-```text
-8290 -> HTTP APIs
-8253 -> HTTPS APIs
-9164 -> WSO2 internal HTTPS listener
-```
-
-### Release Images
-
-Main builds one image per released API:
-
-```text
-docker.io/oubeyd/<api-slug>:v<version>-<commit-sha>
-docker.io/oubeyd/<api-slug>:latest
-```
-
-Release containers may use dynamic host ports to avoid conflicts with the develop container.
-
-## Manual Docker Build Check
-
-The pipeline normally performs this automatically.
-
-For manual testing inside one API folder:
+Run SonarQube locally:
 
 ```powershell
-cd apis\order-api\product-api
+docker volume create sonarqube-data
+docker volume create sonarqube-extensions
+docker volume create sonarqube-logs
 
-New-Item -ItemType Directory -Force -Path CompositeApps | Out-Null
-New-Item -ItemType Directory -Force -Path resources | Out-Null
-New-Item -ItemType Directory -Force -Path libs | Out-Null
-Copy-Item -Path target\*.car -Destination CompositeApps\ -Force
-
-docker build `
-  --build-arg BASE_IMAGE=wso2/wso2mi:4.6.0 `
-  --build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0 `
-  -f deployment/docker/Dockerfile `
-  -t local/order-api-product-api:test .
+docker run -d --name sonarqube `
+  -p 9000:9000 `
+  -v sonarqube-data:/opt/sonarqube/data `
+  -v sonarqube-extensions:/opt/sonarqube/extensions `
+  -v sonarqube-logs:/opt/sonarqube/logs `
+  sonarqube:lts-community
 ```
 
-## Smoke Testing
-
-Smoke tests are handled by:
+Open:
 
 ```text
-jenkins/lib/smokeTest.groovy
+http://localhost:9000
 ```
 
-Jenkins reads the WSO2 API XML files:
+Create a SonarQube token, then add it to Jenkins Credentials:
 
 ```text
-apis/<category>/<api-name>/src/main/wso2mi/artifacts/apis/*.xml
+Credential type: Secret text
+Credential ID:   sonarqube-token
 ```
 
-It extracts:
+Enable SonarQube in `jenkins/config/pipeline.properties`:
 
 ```text
-API context
-resource method
-resource uri-template
+SONAR_ENABLED=true
+SONAR_HOST_URL=http://host.docker.internal:9000
+SONAR_TOKEN_CRED_ID=sonarqube-token
+SONAR_QUALITY_GATE=report
 ```
 
-Example:
-
-```xml
-<api context="/customer" name="CustomerAPI">
-  <resource methods="POST" uri-template="/">
-```
-
-Smoke target:
+Quality gate modes:
 
 ```text
-POST http://localhost:8290/customer
+report  -> run scan and report result without blocking the pipeline
+enforce -> wait for the SonarQube quality gate and fail if it fails
 ```
 
-For methods that need a body, Jenkins sends a basic JSON payload:
-
-```json
-{}
-```
-
-The smoke test passes for:
+Recommended rollout:
 
 ```text
-2xx
-3xx
-405
+develop: SONAR_QUALITY_GATE=report
+main:    SONAR_QUALITY_GATE=enforce, after reports are clean
 ```
 
-`405 Method Not Allowed` can mean the API is deployed but the endpoint requires a different method. The current smoke logic is method-aware to avoid false failures caused by sending GET to POST endpoints.
+### Prometheus
 
-## Runtime API Context Validation
+Prometheus scrapes Jenkins metrics from the Jenkins Prometheus plugin.
 
-This check is handled by:
-
-```text
-jenkins/lib/runtimeChecks.groovy
-```
-
-It prevents multiple APIs deployed into the same MI container from using the same context.
-
-Example duplicate context:
-
-```text
-/helloapi
-```
-
-If two APIs use the same context, WSO2 MI can route requests incorrectly or one API can override the other. The pipeline fails early before deployment.
-
-## Quality Checks
-
-Quality checks are handled by:
-
-```text
-jenkins/lib/qualityChecks.groovy
-```
-
-Checks:
-
-```text
-mvn validate
-xmllint for XML syntax
-yamllint for YAML syntax/style
-```
-
-WSO2 Integration Studio generates YAML files that may not follow strict `yamllint` formatting rules. The pipeline keeps linting developer-written YAML and excludes generated WSO2 metadata/API definition files.
-
-## Security Scans
-
-Security checks are handled by:
-
-```text
-jenkins/lib/securityChecks.groovy
-```
-
-Tools:
-
-```text
-Gitleaks  -> source secret scanning
-Trivy FS  -> source dependency and configuration scanning
-Trivy image -> Docker image vulnerability scanning
-```
-
-Filesystem scan policy:
-
-```text
-Gitleaks secrets fail the pipeline
-Trivy HIGH and CRITICAL findings fail the pipeline
-```
-
-Image scan policy:
-
-```text
-Trivy CRITICAL findings fail the pipeline
-HIGH findings are reported
-```
-
-Security reports are generated as Markdown and archived in Jenkins:
-
-```text
-target/security-reports/
-```
-
-Example report:
-
-```text
-target/security-reports/order-api-math-filesystem-security-report.md
-```
-
-## Trivy Cache
-
-Trivy uses a persistent cache to avoid downloading vulnerability databases every run.
-
-Linux Jenkins agent:
-
-```text
-/var/jenkins_home/trivy-cache
-```
-
-Windows Docker agent:
-
-```text
-C:\trivy-cache
-```
-
-Preload the Linux cache inside the Jenkins container:
-
-```powershell
-docker exec jenkins sh -c "mkdir -p /var/jenkins_home/trivy-cache && trivy --cache-dir /var/jenkins_home/trivy-cache image --download-db-only && trivy --cache-dir /var/jenkins_home/trivy-cache image --download-java-db-only"
-```
-
-Preload the Windows cache:
-
-```powershell
-New-Item -ItemType Directory -Force -Path C:\trivy-cache | Out-Null
-trivy image --cache-dir C:\trivy-cache --download-db-only
-trivy image --cache-dir C:\trivy-cache --download-java-db-only
-```
-
-Copy Trivy cache from Jenkins container to Windows:
-
-```powershell
-New-Item -ItemType Directory -Force -Path C:\trivy-cache | Out-Null
-docker cp jenkins:/var/jenkins_home/trivy-cache/. C:\trivy-cache
-```
-
-## Versioning and Releases
-
-Versioning is handled by:
-
-```text
-jenkins/lib/Versioning.groovy
-```
-
-Commit message rules:
-
-```text
-fix:               patch version
-feat:              minor version
-!:                 major version
-feat!:             major version
-BREAKING CHANGE:   major version
-```
-
-Examples:
-
-```text
-fix: update API      -> 0.0.1 to 0.0.2
-feat: add endpoint   -> 0.0.1 to 0.1.0
-!: change API shape  -> 0.0.1 to 1.0.0
-```
-
-GitHub releases include:
-
-```text
-API name
-API path
-Version
-Commit SHA
-Changes included
-```
-
-## Email Failure Notification
-
-The pipeline sends an email when a build fails if this variable is configured:
-
-```text
-FAILURE_EMAIL_RECIPIENTS
-```
-
-Current location:
-
-```text
-Jenkinsfile environment block
-```
-
-Jenkins must have the Email Extension plugin configured with SMTP settings.
-
-The failure email contains:
-
-```text
-job name
-build number
-branch
-commit
-Jenkins build URL
-compressed console log
-```
-
-## Observability
-
-Monitoring is optional and separate from the delivery pipeline. Jenkins can build, scan, deploy, and smoke test APIs without Prometheus or Grafana. These tools are added only to observe the CI/CD platform itself.
-
-The monitoring flow is:
-
-```text
-Jenkins Prometheus Plugin
-  -> exposes metrics at http://localhost:8080/prometheus
-Prometheus container
-  -> scrapes Jenkins metrics
-Grafana container
-  -> reads Prometheus and displays dashboards
-```
-
-This monitoring setup tracks Jenkins health, not WSO2 business traffic.
-
-Useful signals:
-
-```text
-Jenkins availability
-agent online/offline status
-executor usage
-queue size
-pipeline success/failure trend
-average build duration
-plugin health
-```
-
-### Prometheus Container
-
-Create the Prometheus config on the Windows host:
+Create:
 
 ```powershell
 notepad C:\tmp\prometheus.yml
@@ -691,7 +260,7 @@ scrape_configs:
           - host.docker.internal:8080
 ```
 
-Run Prometheus:
+Run:
 
 ```powershell
 docker volume create prometheus-data
@@ -703,21 +272,19 @@ docker run -d --name prometheus `
   prom/prometheus:latest
 ```
 
-Check that Jenkins is being scraped:
+Check:
 
 ```text
 http://localhost:9090/targets
 ```
 
-Expected result:
+Expected:
 
 ```text
 jenkins = UP
 ```
 
-### Grafana Container
-
-Run Grafana:
+### Grafana
 
 ```powershell
 docker volume create grafana-data
@@ -728,7 +295,7 @@ docker run -d --name grafana `
   grafana/grafana:latest
 ```
 
-Open Grafana:
+Open:
 
 ```text
 http://localhost:3000
@@ -740,62 +307,254 @@ Default login:
 admin / admin
 ```
 
-Add Prometheus as a Grafana data source:
+Add Prometheus datasource:
 
 ```text
 http://host.docker.internal:9090
 ```
 
-Dashboard creation can be done directly in Grafana UI or by importing a JSON dashboard. The dashboard is operational documentation, not a required pipeline artifact.
-
-## Required Jenkins Credentials
-
-Credentials must be stored in Jenkins Credentials, not in source code.
-
-Required credentials:
+Import dashboard:
 
 ```text
-GIT_CRED_ID      -> GitHub token for tags and releases
-REGISTRY_CRED_ID -> Docker Hub token for image push
-Nexus credentials -> Maven settings.xml for custom runtime JAR download
+monitoring/grafana/wso2-mi-jenkins-dashboard.json
 ```
 
-## Useful Commands
+## Build API Containers Manually
 
-Check running containers:
+The pipeline normally builds images automatically. For local testing, first build the API CAR:
 
 ```powershell
-docker ps
+cd apis\order-api\product-api
+mvn -B clean verify
 ```
 
-Check the dev MI container:
+Prepare the Docker context:
 
 ```powershell
-docker logs wso2-mi-dev
+New-Item -ItemType Directory -Force -Path CompositeApps | Out-Null
+New-Item -ItemType Directory -Force -Path resources | Out-Null
+New-Item -ItemType Directory -Force -Path libs | Out-Null
+New-Item -ItemType File -Force -Path libs\.dockerkeep | Out-Null
+
+Copy-Item -Path target\*.car -Destination CompositeApps\ -Force
+
+if (Test-Path target\mi-runtime-libs) {
+  Copy-Item -Path target\mi-runtime-libs\*.jar -Destination libs\ -Force -ErrorAction SilentlyContinue
+}
+
+if (Test-Path deployment\docker\resources) {
+  Copy-Item -Path deployment\docker\resources\* -Destination resources\ -Recurse -Force
+}
 ```
 
-Open a shell inside the dev MI container:
+Build the container image:
 
 ```powershell
-docker exec -it wso2-mi-dev sh
+docker build `
+  --build-arg BASE_IMAGE=wso2/wso2mi:4.6.0 `
+  --build-arg WSO2_SERVER_HOME=/home/wso2carbon/wso2mi-4.6.0 `
+  -f deployment/docker/Dockerfile `
+  -t local/order-api-product-api:test .
 ```
 
-Check deployed CAR files:
+Run it:
 
 ```powershell
-docker exec -it wso2-mi-dev sh -c "ls -lah /home/wso2carbon/wso2mi-4.6.0/repository/deployment/server/carbonapps/"
+docker run -d --name order-api-product-api-test `
+  -p 8290:8290 `
+  -p 8253:8253 `
+  local/order-api-product-api:test
 ```
 
-Test an API manually:
+Check logs:
+
+```powershell
+docker logs order-api-product-api-test
+```
+
+Test an API:
 
 ```powershell
 curl.exe http://localhost:8290/helloapi
 ```
 
-Test a POST API manually:
+Clean up:
 
 ```powershell
-curl.exe -X POST http://localhost:8290/customer -H "Content-Type: application/json" -d "{}"
+docker rm -f order-api-product-api-test
+```
+
+## WSO2 MI Image Layout
+
+Base image:
+
+```text
+wso2/wso2mi:4.6.0
+```
+
+CAR files are copied to:
+
+```text
+/home/wso2carbon/wso2mi-4.6.0/repository/deployment/server/carbonapps/
+```
+
+Runtime JARs are copied to:
+
+```text
+/home/wso2carbon/wso2mi-4.6.0/lib/
+```
+
+When the container starts, WSO2 MI deploys the CAR files automatically.
+
+## Quality And Security
+
+Quality checks:
+
+```text
+mvn validate
+xmllint for WSO2 XML files
+yamllint for developer-written YAML files
+SonarQube scan, optional
+```
+
+Security checks:
+
+```text
+Gitleaks  -> secret scanning
+Trivy FS  -> source dependency/configuration scan
+Trivy image -> Docker image vulnerability scan
+```
+
+Policy:
+
+```text
+Gitleaks secrets fail the pipeline.
+Trivy filesystem HIGH and CRITICAL findings fail the pipeline.
+Trivy image CRITICAL findings fail the pipeline.
+Trivy image HIGH findings are reported.
+```
+
+Reports are archived under:
+
+```text
+target/security-reports/
+```
+
+## Trivy Cache
+
+Linux Jenkins cache:
+
+```text
+/var/jenkins_home/trivy-cache
+```
+
+Windows Docker agent cache:
+
+```text
+C:\trivy-cache
+```
+
+Preload Linux cache:
+
+```powershell
+docker exec jenkins sh -c "mkdir -p /var/jenkins_home/trivy-cache && trivy --cache-dir /var/jenkins_home/trivy-cache image --download-db-only && trivy --cache-dir /var/jenkins_home/trivy-cache image --download-java-db-only"
+```
+
+Preload Windows cache:
+
+```powershell
+New-Item -ItemType Directory -Force -Path C:\trivy-cache | Out-Null
+trivy image --cache-dir C:\trivy-cache --download-db-only
+trivy image --cache-dir C:\trivy-cache --download-java-db-only
+```
+
+The image scan stage uses a Jenkins lock:
+
+```text
+trivy-image-cache
+```
+
+This prevents parallel image scans from writing to the same Trivy cache at the same time.
+
+## Smoke Tests
+
+Smoke tests are generated from:
+
+```text
+apis/<category>/<api-name>/src/main/wso2mi/artifacts/apis/*.xml
+```
+
+Jenkins extracts:
+
+```text
+API context
+resource method
+resource uri-template
+```
+
+For write methods, Jenkins sends:
+
+```json
+{
+  "currency": "EUR",
+  "amount": 1,
+  "customerId": "smoke-test",
+  "name": "Smoke Test"
+}
+```
+
+The smoke test accepts HTTP `2xx` and `3xx`.
+
+## Jenkins Monitoring Dashboard
+
+The Grafana dashboard answers:
+
+```text
+Is Jenkins reachable?
+Are agents online?
+Are executor slots saturated?
+Are jobs queued, blocked, or stuck?
+Are builds failing or becoming unstable?
+Which jobs are slow?
+Are Jenkins plugins unhealthy?
+```
+
+Main panels:
+
+```text
+Jenkins Endpoint
+Failed Runs
+Success Rate
+Queue Waiting
+Online Agents
+Pipeline Outcomes Over Time
+Latest Result By Jenkins Branch/Job
+Slowest Jobs By Average Duration
+Executor Capacity
+Executor Utilization
+Free Executor Slots
+Queue Health
+Agent Online Status
+Plugin Health
+```
+
+Monitoring is for Jenkins health, not WSO2 business traffic.
+
+## Required Jenkins Credentials
+
+```text
+github-token      -> GitHub token for tags/releases
+dockerhub-token   -> Docker Hub token for image push
+sonarqube-token   -> SonarQube token, optional
+Nexus credentials -> stored in Maven settings.xml
+```
+
+## Useful Commands
+
+Check containers:
+
+```powershell
+docker ps
 ```
 
 Check Jenkins metrics:
@@ -804,14 +563,26 @@ Check Jenkins metrics:
 curl.exe http://localhost:8080/prometheus
 ```
 
-Check Prometheus targets:
+Check Prometheus:
 
 ```text
 http://localhost:9090/targets
 ```
 
+Check deployed CAR files:
+
+```powershell
+docker exec -it wso2-mi-dev sh -c "ls -lah /home/wso2carbon/wso2mi-4.6.0/repository/deployment/server/carbonapps/"
+```
+
+Test POST manually:
+
+```powershell
+curl.exe -X POST http://localhost:8290/helloapi/deposit -H "Content-Type: application/json" -d "{\"currency\":\"EUR\",\"amount\":1}"
+```
+
 ## Notes
 
-Generated WSO2 files should not be manually reformatted only to satisfy a generic linter. The pipeline is configured to validate developer-written files while avoiding unnecessary failures caused by generated WSO2 metadata.
+Generated WSO2 metadata should not be manually reformatted only for linting. The pipeline validates developer-written files and excludes generated metadata/API definition files.
 
-The pipeline only processes APIs changed in the current Git range. If no files under `apis/**` changed, Jenkins exits early.
+If no files under `apis/**` changed, Jenkins exits early.

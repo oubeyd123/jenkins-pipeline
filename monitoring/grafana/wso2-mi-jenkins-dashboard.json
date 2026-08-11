@@ -72,6 +72,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
+  "description": "Operational Jenkins dashboard for the WSO2 MI CI/CD pipeline: availability, queue pressure, executor saturation, build outcomes, slow jobs, and plugin health.",
   "id": null,
   "links": [],
   "liveNow": true,
@@ -180,7 +181,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(jenkins_runs_failure_total[$__range]))",
+          "expr": "sum(increase(jenkins_runs_failure_total{jenkins_job=~\"$jenkins_job\"}[$__range]))",
           "instant": false,
           "legendFormat": "",
           "range": true,
@@ -234,8 +235,8 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Successful Runs",
-      "description": "Number of successful Jenkins runs in the selected time range.",
+      "title": "Success Rate",
+      "description": "Percentage of completed runs that succeeded in the selected time range.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -253,7 +254,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(jenkins_runs_success_total[$__range]))",
+          "expr": "100 * sum(increase(jenkins_runs_success_total{jenkins_job=~\"$jenkins_job\"}[$__range])) / clamp_min(sum(increase(jenkins_runs_success_total{jenkins_job=~\"$jenkins_job\"}[$__range])) + sum(increase(jenkins_runs_failure_total{jenkins_job=~\"$jenkins_job\"}[$__range])) + sum(increase(jenkins_runs_unstable_total{jenkins_job=~\"$jenkins_job\"}[$__range])), 1)",
           "instant": false,
           "legendFormat": "",
           "range": true,
@@ -262,7 +263,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
+          "unit": "percent",
           "color": {
             "mode": "thresholds"
           },
@@ -274,13 +275,17 @@
                 "value": null
               },
               {
+                "color": "yellow",
+                "value": 80
+              },
+              {
                 "color": "green",
-                "value": 1
+                "value": 95
               }
             ]
           },
           "mappings": [],
-          "decimals": 0
+          "decimals": 1
         },
         "overrides": []
       },
@@ -322,7 +327,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "sum(increase(jenkins_runs_unstable_total[$__range]))",
+          "expr": "sum(increase(jenkins_runs_unstable_total{jenkins_job=~\"$jenkins_job\"}[$__range]))",
           "instant": false,
           "legendFormat": "",
           "range": true,
@@ -376,8 +381,8 @@
     {
       "id": 6,
       "type": "stat",
-      "title": "Queue Size",
-      "description": "Jobs waiting for an executor. Should normally be 0.",
+      "title": "Queue Waiting",
+      "description": "Jobs waiting for an executor. Should normally stay at 0.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -395,7 +400,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jenkins_queue_size_value",
+          "expr": "sum(jenkins_queue_size_value)",
           "instant": false,
           "legendFormat": "",
           "range": true,
@@ -523,7 +528,7 @@
       "id": 8,
       "type": "timeseries",
       "title": "Pipeline Outcomes Over Time",
-      "description": "Shows whether failures are isolated or repeating after pushes/merges.",
+      "description": "Shows whether failures are isolated or repeating after pushes/merges for the selected jobs.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -541,7 +546,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "increase(jenkins_runs_success_total[$__rate_interval])",
+          "expr": "sum(increase(jenkins_runs_success_total{jenkins_job=~\"$jenkins_job\"}[$__rate_interval]))",
           "instant": false,
           "legendFormat": "success",
           "range": true,
@@ -553,7 +558,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "increase(jenkins_runs_failure_total[$__rate_interval])",
+          "expr": "sum(increase(jenkins_runs_failure_total{jenkins_job=~\"$jenkins_job\"}[$__rate_interval]))",
           "instant": false,
           "legendFormat": "failure",
           "range": true,
@@ -565,7 +570,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "increase(jenkins_runs_unstable_total[$__rate_interval])",
+          "expr": "sum(increase(jenkins_runs_unstable_total{jenkins_job=~\"$jenkins_job\"}[$__rate_interval]))",
           "instant": false,
           "legendFormat": "unstable",
           "range": true,
@@ -693,8 +698,8 @@
     {
       "id": 10,
       "type": "bargauge",
-      "title": "Average Build Duration By Branch/Job",
-      "description": "Average build duration in minutes. Long values usually come from Maven downloads, Trivy DB/cache, Docker image builds, or smoke-test retries.",
+      "title": "Slowest Jobs By Average Duration",
+      "description": "Top average build durations in minutes. Long values usually come from Maven downloads, Trivy DB/cache, Docker image builds, or smoke-test retries.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -712,7 +717,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "(jenkins_jenkins_builds_duration_milliseconds_summary_sum{jenkins_job=~\"$jenkins_job\"} / jenkins_jenkins_builds_duration_milliseconds_summary_count{jenkins_job=~\"$jenkins_job\"}) / 60000",
+          "expr": "topk(10, (jenkins_jenkins_builds_duration_milliseconds_summary_sum{jenkins_job=~\"$jenkins_job\"} / clamp_min(jenkins_jenkins_builds_duration_milliseconds_summary_count{jenkins_job=~\"$jenkins_job\"}, 1)) / 60000)",
           "instant": false,
           "legendFormat": "{{jenkins_job}}",
           "range": true,
@@ -767,7 +772,7 @@
       "id": 11,
       "type": "timeseries",
       "title": "Executor Capacity",
-      "description": "Shows whether Jenkins has free executors or is saturated.",
+      "description": "Busy, free, and total executor slots. If busy reaches total while the queue rises, Jenkins is saturated.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -785,9 +790,9 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jenkins_jenkins_executors_busy",
+          "expr": "sum(jenkins_jenkins_executors_busy)",
           "instant": false,
-          "legendFormat": "busy",
+          "legendFormat": "busy slots",
           "range": true,
           "refId": "A"
         },
@@ -797,11 +802,23 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jenkins_jenkins_executors_available",
+          "expr": "sum(jenkins_jenkins_executors_available)",
           "instant": false,
-          "legendFormat": "available",
+          "legendFormat": "free slots",
           "range": true,
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "sum(jenkins_jenkins_executors_busy) + sum(jenkins_jenkins_executors_available)",
+          "instant": false,
+          "legendFormat": "total slots",
+          "range": true,
+          "refId": "C"
         }
       ],
       "fieldConfig": {
@@ -976,8 +993,8 @@
     {
       "id": 14,
       "type": "stat",
-      "title": "Busy Executors",
-      "description": "Current busy executor count.",
+      "title": "Executor Utilization",
+      "description": "Percentage of Jenkins executor capacity currently in use.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -995,7 +1012,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jenkins_jenkins_executors_busy",
+          "expr": "100 * sum(jenkins_jenkins_executors_busy) / clamp_min(sum(jenkins_jenkins_executors_busy) + sum(jenkins_jenkins_executors_available), 1)",
           "instant": false,
           "legendFormat": "",
           "range": true,
@@ -1004,7 +1021,7 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "none",
+          "unit": "percent",
           "color": {
             "mode": "thresholds"
           },
@@ -1017,16 +1034,16 @@
               },
               {
                 "color": "yellow",
-                "value": 1
+                "value": 70
               },
               {
                 "color": "red",
-                "value": 3
+                "value": 90
               }
             ]
           },
           "mappings": [],
-          "decimals": 0
+          "decimals": 1
         },
         "overrides": []
       },
@@ -1049,8 +1066,8 @@
     {
       "id": 15,
       "type": "stat",
-      "title": "Available Executors",
-      "description": "Current available executor count.",
+      "title": "Free Executor Slots",
+      "description": "Current executor headroom. Zero means new jobs must wait for an executor.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1068,7 +1085,7 @@
             "uid": "${DS_PROMETHEUS}"
           },
           "editorMode": "code",
-          "expr": "jenkins_jenkins_executors_available",
+          "expr": "sum(jenkins_jenkins_executors_available)",
           "instant": false,
           "legendFormat": "",
           "range": true,
@@ -1267,7 +1284,9 @@
   "tags": [
     "jenkins",
     "wso2-mi",
-    "ci-cd"
+    "ci-cd",
+    "operations",
+    "pipeline-health"
   ],
   "templating": {
     "list": [
@@ -1340,8 +1359,8 @@
     ]
   },
   "timezone": "browser",
-  "title": "WSO2 MI CI/CD - Jenkins Operations",
+  "title": "WSO2 MI CI/CD - Jenkins Control Room",
   "uid": "wso2-mi-jenkins-ops",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
