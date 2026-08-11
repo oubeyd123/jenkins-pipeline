@@ -4,32 +4,20 @@ def call(Map cfg) {
         return
     }
 
-    if (!(env.SONAR_HOST_URL ?: '').trim()) {
-        error 'SONAR_HOST_URL is required when SONAR_ENABLED=true'
-    }
-
-    if (!(env.SONAR_TOKEN_CRED_ID ?: '').trim()) {
-        error 'SONAR_TOKEN_CRED_ID is required when SONAR_ENABLED=true'
-    }
-
     def apiPath = "apis/${cfg.apiPath}"
     def projectKey = "wso2-mi-${cfg.apiSlug}"
+    def scannerTool = env.SONAR_SCANNER_TOOL ?: 'SonarScanner'
+    def sonarServer = env.SONAR_SERVER_NAME ?: 'SonarQube'
     def qualityGateMode = (env.SONAR_QUALITY_GATE ?: 'report').trim().toLowerCase()
     def waitForGate = qualityGateMode == 'enforce'
 
     dir(apiPath) {
-        withCredentials([string(credentialsId: env.SONAR_TOKEN_CRED_ID, variable: 'SONAR_TOKEN')]) {
+        def scannerHome = tool scannerTool
+        withSonarQubeEnv(sonarServer) {
             sh """
                 set -euo pipefail
 
-                if ! command -v sonar-scanner >/dev/null 2>&1; then
-                  echo "sonar-scanner is not installed on this Jenkins agent"
-                  exit 1
-                fi
-
-                sonar-scanner \
-                  -Dsonar.host.url='${env.SONAR_HOST_URL}' \
-                  -Dsonar.token="\$SONAR_TOKEN" \
+                '${scannerHome}/bin/sonar-scanner' \
                   -Dsonar.projectKey='${projectKey}' \
                   -Dsonar.projectName='${cfg.apiSlug}' \
                   -Dsonar.projectBaseDir='.' \

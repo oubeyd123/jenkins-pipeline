@@ -73,6 +73,12 @@ def applyConfigValue(String key, String value) {
         case 'SONAR_HOST_URL':
             env.SONAR_HOST_URL = value
             break
+        case 'SONAR_SERVER_NAME':
+            env.SONAR_SERVER_NAME = value
+            break
+        case 'SONAR_SCANNER_TOOL':
+            env.SONAR_SCANNER_TOOL = value
+            break
         case 'SONAR_TOKEN_CRED_ID':
             env.SONAR_TOKEN_CRED_ID = value
             break

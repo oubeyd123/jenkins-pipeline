@@ -85,7 +85,7 @@ xmllint
 yamllint
 gitleaks
 trivy
-sonar-scanner, optional
+SonarQube Scanner Jenkins tool, optional
 ```
 
 Windows Docker agent:
@@ -218,6 +218,8 @@ Enable SonarQube in `jenkins/config/pipeline.properties`:
 ```text
 SONAR_ENABLED=true
 SONAR_HOST_URL=http://host.docker.internal:9000
+SONAR_SERVER_NAME=SonarQube
+SONAR_SCANNER_TOOL=SonarScanner
 SONAR_TOKEN_CRED_ID=sonarqube-token
 SONAR_QUALITY_GATE=report
 ```
