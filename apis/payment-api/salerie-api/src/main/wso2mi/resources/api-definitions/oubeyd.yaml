@@ -1,0 +1,14 @@
+openapi: 3.0.1
+info:
+  title: oubeyd
+  description: API Definition of oubeyd
+  version: 1.0.0
+servers:
+  - url: http://localhost:8290/oubeyd
+  - url: https://localhost:8253/oubeyd
+paths:
+  /:
+    get:
+      responses:
+        default:
+          description: Default response

@@ -1,7 +1,3 @@
----
-# Project YAML policy:
-# - enforce normal style rules for developer-owned YAML
-# - ignore WSO2 Integration Studio generated YAML that is accepted by MI
 extends: default
 
 ignore: |
