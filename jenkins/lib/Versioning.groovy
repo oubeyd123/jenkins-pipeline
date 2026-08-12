@@ -155,27 +155,47 @@ def createGitHubRelease(String tag, String releaseName, String changelogBody, St
             set -euo pipefail
 
             release_url="https://api.github.com/repos/${repo}/releases/tags/${tag}"
-            status=\$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            status=\$(curl --silent --show-error --retry 5 --retry-delay 3 --retry-connrefused \
+              --connect-timeout 20 --max-time 120 \
+              --output /dev/null --write-out '%{http_code}' \
               --header "Authorization: Bearer \$GIT_TOKEN" \
               --header "Accept: application/vnd.github+json" \
-              "\$release_url")
+              "\$release_url" || true)
+            status="\${status:-000}"
 
             if [ "\$status" = "200" ]; then
               echo "GitHub Release ${tag} already exists; reusing it"
               exit 0
             fi
 
-            create_status=\$(curl --silent --show-error --output github-release-response.json --write-out '%{http_code}' \
+            create_status=\$(curl --silent --show-error --retry 5 --retry-delay 3 --retry-connrefused \
+              --connect-timeout 20 --max-time 120 \
+              --output github-release-response.json --write-out '%{http_code}' \
               --request POST \
               --header "Authorization: Bearer \$GIT_TOKEN" \
               --header "Accept: application/vnd.github+json" \
               --header "Content-Type: application/json" \
               --data @${payloadFile} \
-              "https://api.github.com/repos/${repo}/releases")
+              "https://api.github.com/repos/${repo}/releases" || true)
+            create_status="\${create_status:-000}"
 
             if [ "\$create_status" != "201" ]; then
+              status=\$(curl --silent --show-error --retry 2 --retry-delay 3 --retry-connrefused \
+                --connect-timeout 20 --max-time 120 \
+                --output /dev/null --write-out '%{http_code}' \
+                --header "Authorization: Bearer \$GIT_TOKEN" \
+                --header "Accept: application/vnd.github+json" \
+                "\$release_url" || true)
+              status="\${status:-000}"
+              if [ "\$status" = "200" ]; then
+                echo "GitHub Release ${tag} exists after retry; reusing it"
+                exit 0
+              fi
+
               echo "Failed to create GitHub Release ${tag}; HTTP \$create_status"
-              cat github-release-response.json
+              if [ -s github-release-response.json ]; then
+                cat github-release-response.json
+              fi
               exit 1
             fi
 
