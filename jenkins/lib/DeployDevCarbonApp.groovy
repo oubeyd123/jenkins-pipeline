@@ -1,4 +1,8 @@
 def call(Map cfg) {
+    return deploy(cfg)
+}
+
+def deploy(Map cfg) {
     def containerName = cfg.containerName
     def baseImage = cfg.baseImage
     def serverHome = cfg.serverHome

@@ -112,6 +112,42 @@ DEPLOY_AGENT_LABEL=wso2-dev-server
 
 ## Start Required Containers
 
+Recommended quick start:
+
+```powershell
+docker compose up -d
+```
+
+This starts:
+
+```text
+jenkins
+nexus
+sonarqube
+integration-control-plane
+prometheus
+grafana
+```
+
+Service URLs:
+
+| Service | URL |
+|---------|-----|
+| Jenkins | `http://localhost:8080` |
+| Nexus | `http://localhost:8081` |
+| SonarQube | `http://localhost:9000` |
+| Integration Control Plane | `https://localhost:9446` |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` |
+
+Stop the stack:
+
+```powershell
+docker compose down
+```
+
+The manual commands below are kept for cases where you want to start one service at a time.
+
 ### Jenkins
 
 ```powershell
@@ -236,6 +272,70 @@ Recommended rollout:
 ```text
 develop: SONAR_QUALITY_GATE=report
 main:    SONAR_QUALITY_GATE=enforce, after reports are clean
+```
+
+### Integration Control Plane
+
+WSO2 Integration Control Plane, or ICP, is optional. It is used to observe and manage WSO2 MI runtimes and the artifacts deployed inside them.
+
+Docker Compose starts it with:
+
+```text
+wso2/wso2-integration-control-plane:2.0.0-rocky
+```
+
+Open:
+
+```text
+https://localhost:9446
+```
+
+Runtime communication port:
+
+```text
+9445
+```
+
+Important: starting ICP is not enough by itself. Each MI runtime/container must be configured to connect to ICP before it appears in the control plane.
+
+Pipeline registration:
+
+```text
+Jenkins can inject the ICP configuration into main release MI containers.
+The setting is written inside the container at:
+/home/wso2carbon/wso2mi-4.6.0/conf/deployment.toml
+```
+
+ICP registration is active only for `main` release deployments. Develop containers are temporary and are deleted after smoke tests, so they are not registered in ICP.
+
+Setup:
+
+```text
+1. Open ICP and copy the MI runtime secret.
+2. Add the secret to Jenkins Credentials as Secret text.
+3. Use credential ID: icp-runtime-secret.
+4. Run the main pipeline so Jenkins starts the MI containers with ICP config.
+```
+
+Pipeline properties:
+
+```text
+ICP_URL=https://host.docker.internal:9445
+ICP_ENVIRONMENT=dev
+ICP_PROJECT=wso2-mi-project
+ICP_SECRET_CRED_ID=icp-runtime-secret
+```
+
+The integration name is automatically set to the API slug, for example:
+
+```text
+order-api-product-api
+```
+
+Official documentation:
+
+```text
+https://mi.docs.wso2.com/en/latest/observe-and-manage/working-with-integration-control-plane/
 ```
 
 ### Prometheus

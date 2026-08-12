@@ -85,6 +85,18 @@ def applyConfigValue(String key, String value) {
         case 'SONAR_QUALITY_GATE':
             env.SONAR_QUALITY_GATE = value
             break
+        case 'ICP_URL':
+            env.ICP_URL = value
+            break
+        case 'ICP_ENVIRONMENT':
+            env.ICP_ENVIRONMENT = value
+            break
+        case 'ICP_PROJECT':
+            env.ICP_PROJECT = value
+            break
+        case 'ICP_SECRET_CRED_ID':
+            env.ICP_SECRET_CRED_ID = value
+            break
         case 'FAILURE_EMAIL_RECIPIENTS':
             env.FAILURE_EMAIL_RECIPIENTS = value
             break
