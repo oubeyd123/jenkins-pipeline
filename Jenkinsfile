@@ -273,6 +273,7 @@ pipeline {
                                         apiSlug      : api.slug,
                                         imageTag     : imageTag,
                                         containerName: "${api.slug}-release",
+                                        serverHome   : env.WSO2_SERVER_HOME,
                                     ])
                                 }
                             }
