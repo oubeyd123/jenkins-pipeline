@@ -313,17 +313,20 @@ Setup:
 ```text
 1. Open ICP and copy the MI runtime secret.
 2. Add the secret to Jenkins Credentials as Secret text.
-3. Use credential ID: icp-runtime-secret.
-4. Run the main pipeline so Jenkins starts the MI containers with ICP config.
+3. Use credential IDs with this format: icp-runtime-secret-<api-slug>.
+4. Make sure the Docker network exists: docker network create wso2-mi-net
+5. Make sure the ICP certificate includes integration-control-plane as a DNS SAN.
+6. Run the main pipeline so Jenkins starts the MI containers with ICP config.
 ```
 
 Pipeline properties:
 
 ```text
-ICP_URL=https://host.docker.internal:9445
+DEPLOY_DOCKER_NETWORK=wso2-mi-net
+ICP_URL=https://integration-control-plane:9445
 ICP_ENVIRONMENT=dev
 ICP_PROJECT=wso2-mi-project
-ICP_SECRET_CRED_ID=icp-runtime-secret
+ICP_SECRET_CRED_ID_PREFIX=icp-runtime-secret
 ICP_CONTAINER_NAME=integration-control-plane
 ICP_KEYSTORE_PATH=/home/wso2carbon/wso2-integration-control-plane-2.0.0/conf/security/wso2carbon.jks
 ICP_KEYSTORE_ALIAS=wso2carbon
@@ -332,10 +335,43 @@ MI_TRUSTSTORE_PATH=/home/wso2carbon/wso2mi-4.6.0/repository/resources/security/c
 MI_TRUSTSTORE_PASSWORD=wso2carbon
 ```
 
+For local Docker testing, release MI containers and ICP share the same Docker network:
+
+```text
+wso2-mi-net
+```
+
+This lets containers reach each other by name:
+
+```text
+MI -> ICP: https://integration-control-plane:9445
+ICP -> MI management API: https://<api-slug>-release:9164
+```
+
+Jenkins creates the network if it is missing and connects the ICP container to it during `main` deployments. It also runs release MI containers on that network and sets the MI hostname to the release container name.
+
+The ICP certificate must contain these DNS names:
+
+```text
+localhost
+host.docker.internal
+integration-control-plane
+```
+
 The integration name is automatically set to the API slug, for example:
 
 ```text
 order-api-product-api
+```
+
+ICP runtime secrets are selected from Jenkins credentials by API slug:
+
+```text
+icp-runtime-secret-customer-api-customerapi
+icp-runtime-secret-greeding-api-test
+icp-runtime-secret-order-api-math
+icp-runtime-secret-order-api-product-api
+icp-runtime-secret-payment-api-salerie-api
 ```
 
 Official documentation:

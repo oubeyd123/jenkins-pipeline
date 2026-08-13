@@ -1,5 +1,6 @@
 def call(Map cfg) {
-    withCredentials([string(credentialsId: env.ICP_SECRET_CRED_ID ?: 'icp-runtime-secret', variable: 'ICP_RUNTIME_SECRET')]) {
+    def icpSecretCredentialId = "${env.ICP_SECRET_CRED_ID_PREFIX ?: 'icp-runtime-secret'}-${cfg.apiSlug}"
+    withCredentials([string(credentialsId: icpSecretCredentialId, variable: 'ICP_RUNTIME_SECRET')]) {
         return deploy(cfg)
     }
 }
@@ -8,6 +9,7 @@ def deploy(Map cfg) {
     def containerName = cfg.get('containerName', cfg.apiSlug)
     def ports = cfg.get('ports', '-p 8290')
     def envFile = cfg.get('envFile', '')
+    def deployNetwork = env.DEPLOY_DOCKER_NETWORK ?: ''
     def serverHome = cfg.get('serverHome', env.WSO2_SERVER_HOME ?: '/home/wso2carbon/wso2mi-4.6.0')
     def icpUrl = env.ICP_URL
     def icpEnvironment = env.ICP_ENVIRONMENT ?: 'dev'
@@ -26,6 +28,25 @@ def deploy(Map cfg) {
           & docker @Arguments
           if (\$LASTEXITCODE -ne 0) {
             throw "Docker command failed with exit code \${LASTEXITCODE}: docker \$(\$Arguments -join ' ')"
+          }
+        }
+        function Ensure-DeployNetwork {
+          param([string]\$NetworkName, [string]\$IcpContainerName)
+
+          if ([string]::IsNullOrWhiteSpace(\$NetworkName)) {
+            return
+          }
+
+          \$existingNetwork = docker network ls --filter "name=^\$NetworkName`$" --format '{{.Name}}'
+          if (\$existingNetwork -ne \$NetworkName) {
+            Write-Host "Creating Docker network \$NetworkName"
+            Invoke-Docker -Arguments @('network', 'create', \$NetworkName)
+          }
+
+          \$members = @(docker network inspect \$NetworkName --format '{{range .Containers}}{{.Name}}{{println}}{{end}}')
+          if (\$members -notcontains \$IcpContainerName) {
+            Write-Host "Connecting \$IcpContainerName to Docker network \$NetworkName"
+            Invoke-Docker -Arguments @('network', 'connect', \$NetworkName, \$IcpContainerName)
           }
         }
         function Enable-IcpRegistration {
@@ -56,6 +77,63 @@ icp_url = "${icpUrl}"
           Invoke-Docker -Arguments @('cp', \$tmpFile, "\$ContainerName`:/tmp/icp-config.toml")
           Invoke-Docker -Arguments @('exec', \$ContainerName, 'sh', '-c', "cat /tmp/icp-config.toml >> '\$ServerHome/conf/deployment.toml'")
           Remove-Item -Path \$tmpFile -Force -ErrorAction SilentlyContinue
+        }
+        function Set-MiHostname {
+          param(
+            [string]\$ContainerName,
+            [string]\$ServerHome,
+            [string]\$RuntimeName
+          )
+
+          Write-Host "Configuring MI server hostname as \$RuntimeName"
+          \$hostScript = Join-Path \$env:TEMP "mi-hostname-\$ContainerName.sh"
+          \$script = @'
+set -eu
+config_file="\$1"
+runtime_name="\$2"
+tmp_file="\${config_file}.tmp"
+awk -v runtime="\$runtime_name" '
+BEGIN { in_server = 0; done = 0 }
+/^\\[server\\][[:space:]]*\$/ {
+  if (in_server && !done) {
+    print "hostname = \"" runtime "\""
+    done = 1
+  }
+  in_server = 1
+  print
+  next
+}
+/^\\[[^]]+\\][[:space:]]*\$/ {
+  if (in_server && !done) {
+    print "hostname = \"" runtime "\""
+    done = 1
+  }
+  in_server = 0
+  print
+  next
+}
+in_server && /^[[:space:]]*hostname[[:space:]]*=/ {
+  if (!done) {
+    print "hostname = \"" runtime "\""
+    done = 1
+  }
+  next
+}
+{ print }
+END {
+  if (!done) {
+    print ""
+    print "[server]"
+    print "hostname = \"" runtime "\""
+  }
+}
+' "\$config_file" > "\$tmp_file"
+mv "\$tmp_file" "\$config_file"
+'@
+          Set-Content -Path \$hostScript -Value \$script -Encoding ascii
+          Invoke-Docker -Arguments @('cp', \$hostScript, "\$ContainerName`:/tmp/set-mi-hostname.sh")
+          Invoke-Docker -Arguments @('exec', \$ContainerName, 'sh', '/tmp/set-mi-hostname.sh', "\$ServerHome/conf/deployment.toml", \$RuntimeName)
+          Remove-Item -Path \$hostScript -Force -ErrorAction SilentlyContinue
         }
         function Import-IcpCertificate {
           param([string]\$ContainerName)
@@ -102,6 +180,8 @@ icp_url = "${icpUrl}"
         }
 
         \$portArgs = '${ports}' -split '\\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) }
+        \$deployNetwork = '${deployNetwork}'
+        Ensure-DeployNetwork -NetworkName \$deployNetwork -IcpContainerName '${icpContainerName}'
 
         Invoke-Docker -Arguments @('pull', '${cfg.imageTag}')
 
@@ -115,6 +195,9 @@ icp_url = "${icpUrl}"
         }
 
         \$runArgs = @('run', '-d', '--restart', 'unless-stopped', '--name', '${containerName}') + \$portArgs
+        if (-not [string]::IsNullOrWhiteSpace(\$deployNetwork)) {
+          \$runArgs += @('--network', \$deployNetwork)
+        }
         if (-not [string]::IsNullOrWhiteSpace('${envFile}')) {
           \$runArgs += '${envFile}' -split '\\s+'
         }
@@ -123,6 +206,7 @@ icp_url = "${icpUrl}"
         Invoke-Docker -Arguments \$runArgs
 
         Start-Sleep -Seconds 10
+        Set-MiHostname -ContainerName '${containerName}' -ServerHome '${serverHome}' -RuntimeName '${containerName}'
         Enable-IcpRegistration -ContainerName '${containerName}' -ServerHome '${serverHome}' -RuntimeName '${containerName}'
         Import-IcpCertificate -ContainerName '${containerName}'
         Write-Host 'Restarting MI so ICP settings are loaded'
