@@ -40,6 +40,9 @@ def applyConfigValue(String key, String value) {
         case 'DEPLOY_AGENT_LABEL':
             env.DEPLOY_AGENT_LABEL = value
             break
+        case 'DEPLOY_DOCKER_NETWORK':
+            env.DEPLOY_DOCKER_NETWORK = value
+            break
         case 'SMOKE_BASE_URL':
             env.SMOKE_BASE_URL = value
             break
@@ -94,8 +97,8 @@ def applyConfigValue(String key, String value) {
         case 'ICP_PROJECT':
             env.ICP_PROJECT = value
             break
-        case 'ICP_SECRET_CRED_ID':
-            env.ICP_SECRET_CRED_ID = value
+        case 'ICP_SECRET_CRED_ID_PREFIX':
+            env.ICP_SECRET_CRED_ID_PREFIX = value
             break
         case 'ICP_CONTAINER_NAME':
             env.ICP_CONTAINER_NAME = value
