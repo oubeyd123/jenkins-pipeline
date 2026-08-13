@@ -72,3 +72,7 @@ volumes:
   icp_data:
   prometheus_data:
   grafana_data:
+
+networks:
+  default:
+    name: wso2-mi-net
