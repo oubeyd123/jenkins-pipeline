@@ -324,6 +324,12 @@ ICP_URL=https://host.docker.internal:9445
 ICP_ENVIRONMENT=dev
 ICP_PROJECT=wso2-mi-project
 ICP_SECRET_CRED_ID=icp-runtime-secret
+ICP_CONTAINER_NAME=integration-control-plane
+ICP_KEYSTORE_PATH=/home/wso2carbon/wso2-integration-control-plane-2.0.0/conf/security/wso2carbon.jks
+ICP_KEYSTORE_ALIAS=wso2carbon
+ICP_KEYSTORE_PASSWORD=wso2carbon
+MI_TRUSTSTORE_PATH=/home/wso2carbon/wso2mi-4.6.0/repository/resources/security/client-truststore.jks
+MI_TRUSTSTORE_PASSWORD=wso2carbon
 ```
 
 The integration name is automatically set to the API slug, for example:

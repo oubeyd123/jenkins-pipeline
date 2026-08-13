@@ -97,6 +97,24 @@ def applyConfigValue(String key, String value) {
         case 'ICP_SECRET_CRED_ID':
             env.ICP_SECRET_CRED_ID = value
             break
+        case 'ICP_CONTAINER_NAME':
+            env.ICP_CONTAINER_NAME = value
+            break
+        case 'ICP_KEYSTORE_PATH':
+            env.ICP_KEYSTORE_PATH = value
+            break
+        case 'ICP_KEYSTORE_ALIAS':
+            env.ICP_KEYSTORE_ALIAS = value
+            break
+        case 'ICP_KEYSTORE_PASSWORD':
+            env.ICP_KEYSTORE_PASSWORD = value
+            break
+        case 'MI_TRUSTSTORE_PATH':
+            env.MI_TRUSTSTORE_PATH = value
+            break
+        case 'MI_TRUSTSTORE_PASSWORD':
+            env.MI_TRUSTSTORE_PASSWORD = value
+            break
         case 'FAILURE_EMAIL_RECIPIENTS':
             env.FAILURE_EMAIL_RECIPIENTS = value
             break
