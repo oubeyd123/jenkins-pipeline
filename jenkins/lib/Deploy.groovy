@@ -12,6 +12,12 @@ def deploy(Map cfg) {
     def icpUrl = env.ICP_URL
     def icpEnvironment = env.ICP_ENVIRONMENT ?: 'dev'
     def icpProject = env.ICP_PROJECT ?: 'wso2-mi-project'
+    def icpContainerName = env.ICP_CONTAINER_NAME ?: 'integration-control-plane'
+    def icpKeystorePath = env.ICP_KEYSTORE_PATH ?: '/home/wso2carbon/wso2-integration-control-plane-2.0.0/conf/security/wso2carbon.jks'
+    def icpKeystoreAlias = env.ICP_KEYSTORE_ALIAS ?: 'wso2carbon'
+    def icpKeystorePassword = env.ICP_KEYSTORE_PASSWORD ?: 'wso2carbon'
+    def miTruststorePath = env.MI_TRUSTSTORE_PATH ?: "${serverHome}/repository/resources/security/client-truststore.jks"
+    def miTruststorePassword = env.MI_TRUSTSTORE_PASSWORD ?: 'wso2carbon'
 
     powershell """
         \$ErrorActionPreference = 'Stop'
@@ -51,6 +57,49 @@ icp_url = "${icpUrl}"
           Invoke-Docker -Arguments @('exec', \$ContainerName, 'sh', '-c', "cat /tmp/icp-config.toml >> '\$ServerHome/conf/deployment.toml'")
           Remove-Item -Path \$tmpFile -Force -ErrorAction SilentlyContinue
         }
+        function Import-IcpCertificate {
+          param([string]\$ContainerName)
+
+          Write-Host "Importing ICP certificate into MI truststore"
+          \$hostCert = Join-Path \$env:TEMP "icp-runtime-\$ContainerName.crt"
+          Invoke-Docker -Arguments @(
+            'exec',
+            '${icpContainerName}',
+            'keytool',
+            '-exportcert',
+            '-rfc',
+            '-alias',
+            '${icpKeystoreAlias}',
+            '-keystore',
+            '${icpKeystorePath}',
+            '-storepass',
+            '${icpKeystorePassword}',
+            '-file',
+            '/tmp/icp-runtime.crt'
+          )
+          Invoke-Docker -Arguments @('cp', '${icpContainerName}:/tmp/icp-runtime.crt', \$hostCert)
+          Invoke-Docker -Arguments @('cp', \$hostCert, "\$ContainerName`:/tmp/icp-runtime.crt")
+          & docker exec \$ContainerName keytool -delete -alias icp-runtime -keystore '${miTruststorePath}' -storepass '${miTruststorePassword}'
+          if (\$LASTEXITCODE -ne 0) {
+            Write-Host 'ICP certificate alias was not present in MI truststore; continuing with import'
+          }
+          Invoke-Docker -Arguments @(
+            'exec',
+            \$ContainerName,
+            'keytool',
+            '-importcert',
+            '-noprompt',
+            '-alias',
+            'icp-runtime',
+            '-file',
+            '/tmp/icp-runtime.crt',
+            '-keystore',
+            '${miTruststorePath}',
+            '-storepass',
+            '${miTruststorePassword}'
+          )
+          Remove-Item -Path \$hostCert -Force -ErrorAction SilentlyContinue
+        }
 
         \$portArgs = '${ports}' -split '\\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace(\$_) }
 
@@ -75,6 +124,7 @@ icp_url = "${icpUrl}"
 
         Start-Sleep -Seconds 10
         Enable-IcpRegistration -ContainerName '${containerName}' -ServerHome '${serverHome}' -RuntimeName '${containerName}'
+        Import-IcpCertificate -ContainerName '${containerName}'
         Write-Host 'Restarting MI so ICP settings are loaded'
         Invoke-Docker -Arguments @('restart', '${containerName}')
         Start-Sleep -Seconds 20
