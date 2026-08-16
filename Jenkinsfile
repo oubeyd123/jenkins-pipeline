@@ -144,6 +144,16 @@ pipeline {
                     apis.each { api ->
                         branchesMap[api.slug] = {
                             echo "Pipeline API: slug=${api.slug} path=apis/${api.path}"
+                            def result = null
+                            if (env.IS_RELEASE == 'true') {
+                                def versioning = load 'jenkins/lib/Versioning.groovy'
+                                result = versioning.nextVersion(api.slug, api.path)
+                                if (result == null) {
+                                    echo "No version bump needed for ${api.slug}; skipping release"
+                                    return
+                                }
+                                echo "Release version for ${api.slug}: ${result.version}"
+                            }
 
                             stage("Validate: ${api.slug}") {
                                 def quality = load 'jenkins/lib/qualityChecks.groovy'
@@ -163,7 +173,7 @@ pipeline {
                             stage("Test & Package CAR: ${api.slug}") {
                                 def build = load 'jenkins/lib/Buildandpackage.groovy'
                                 def miRuntimeLibs = load 'jenkins/lib/miRuntimeLibs.groovy'
-                                def car = build(api.path)
+                                def car = build(apiPath: api.path, version: result?.version ?: '')
                                 miRuntimeLibs.prepare(api.path)
                                 junit allowEmptyResults: true, testResults: "apis/${api.path}/target/surefire-reports/*.xml"
                                 archiveArtifacts artifacts: car, fingerprint: true
@@ -224,14 +234,8 @@ pipeline {
                                 return
                             }
 
-                            def versioning = load 'jenkins/lib/Versioning.groovy'
-                            def result = versioning.nextVersion(api.slug, api.path)
-                            if (result == null) {
-                                echo "No version bump needed for ${api.slug}; skipping release"
-                                return
-                            }
-
                             stage("Version & Tag: ${api.slug}") {
+                                def versioning = load 'jenkins/lib/Versioning.groovy'
                                 versioning.tagAndRelease(result.tag, result.releaseName, result.changelog, env.GIT_CRED_ID)
                             }
 
