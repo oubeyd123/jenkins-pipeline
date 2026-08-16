@@ -37,7 +37,7 @@ def deploy(Map cfg) {
             return
           }
 
-          \$existingNetwork = docker network ls --filter "name=^\$NetworkName`$" --format '{{.Name}}'
+          \$existingNetwork = docker network ls --format '{{.Name}}' | Where-Object { \$_ -eq \$NetworkName }
           if (\$existingNetwork -ne \$NetworkName) {
             Write-Host "Creating Docker network \$NetworkName"
             Invoke-Docker -Arguments @('network', 'create', \$NetworkName)
