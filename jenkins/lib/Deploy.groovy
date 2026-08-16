@@ -61,7 +61,7 @@ def deploy(Map cfg) {
           }
 
           Write-Host "Configuring ICP registration for \$RuntimeName"
-          \$tmpFile = Join-Path \$env:TEMP "icp-\$ContainerName.toml"
+          \$hostConfig = Join-Path \$env:TEMP "deployment-icp-\$ContainerName.toml"
           \$toml = @"
 
 [icp_config]
@@ -73,10 +73,28 @@ runtime = "\$RuntimeName"
 secret = "\$env:ICP_RUNTIME_SECRET"
 icp_url = "${icpUrl}"
 "@
-          Set-Content -Path \$tmpFile -Value \$toml -Encoding ascii
-          Invoke-Docker -Arguments @('cp', \$tmpFile, "\$ContainerName`:/tmp/icp-config.toml")
-          Invoke-Docker -Arguments @('exec', \$ContainerName, 'sh', '-c', "cat /tmp/icp-config.toml >> '\$ServerHome/conf/deployment.toml'")
-          Remove-Item -Path \$tmpFile -Force -ErrorAction SilentlyContinue
+          Invoke-Docker -Arguments @('cp', "\$ContainerName`:\$ServerHome/conf/deployment.toml", \$hostConfig)
+
+          \$lines = [System.Collections.Generic.List[string]]::new()
+          \$lines.AddRange([string[]](Get-Content -Path \$hostConfig))
+          for (\$i = 0; \$i -lt \$lines.Count; \$i++) {
+            if (\$lines[\$i] -match '^\\[icp_config\\]\\s*\$') {
+              \$end = \$lines.Count
+              for (\$j = \$i + 1; \$j -lt \$lines.Count; \$j++) {
+                if (\$lines[\$j] -match '^\\[[^\\]]+\\]\\s*\$') {
+                  \$end = \$j
+                  break
+                }
+              }
+              \$lines.RemoveRange(\$i, \$end - \$i)
+              break
+            }
+          }
+
+          \$lines.AddRange([string[]](\$toml -split "`r?`n"))
+          Set-Content -Path \$hostConfig -Value \$lines -Encoding ascii
+          Invoke-Docker -Arguments @('cp', \$hostConfig, "\$ContainerName`:\$ServerHome/conf/deployment.toml")
+          Remove-Item -Path \$hostConfig -Force -ErrorAction SilentlyContinue
         }
         function Set-MiHostname {
           param(
