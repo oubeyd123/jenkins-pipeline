@@ -86,54 +86,49 @@ icp_url = "${icpUrl}"
           )
 
           Write-Host "Configuring MI server hostname as \$RuntimeName"
-          \$hostScript = Join-Path \$env:TEMP "mi-hostname-\$ContainerName.sh"
-          \$script = @'
-set -eu
-config_file="\$1"
-runtime_name="\$2"
-tmp_file="\${config_file}.tmp"
-awk -v runtime="\$runtime_name" '
-BEGIN { in_server = 0; done = 0 }
-/^\\[server\\][[:space:]]*\$/ {
-  if (in_server && !done) {
-    print "hostname = \"" runtime "\""
-    done = 1
-  }
-  in_server = 1
-  print
-  next
-}
-/^\\[[^]]+\\][[:space:]]*\$/ {
-  if (in_server && !done) {
-    print "hostname = \"" runtime "\""
-    done = 1
-  }
-  in_server = 0
-  print
-  next
-}
-in_server && /^[[:space:]]*hostname[[:space:]]*=/ {
-  if (!done) {
-    print "hostname = \"" runtime "\""
-    done = 1
-  }
-  next
-}
-{ print }
-END {
-  if (!done) {
-    print ""
-    print "[server]"
-    print "hostname = \"" runtime "\""
-  }
-}
-' "\$config_file" > "\$tmp_file"
-mv "\$tmp_file" "\$config_file"
-'@
-          Set-Content -Path \$hostScript -Value \$script -Encoding ascii
-          Invoke-Docker -Arguments @('cp', \$hostScript, "\$ContainerName`:/tmp/set-mi-hostname.sh")
-          Invoke-Docker -Arguments @('exec', \$ContainerName, 'sh', '/tmp/set-mi-hostname.sh', "\$ServerHome/conf/deployment.toml", \$RuntimeName)
-          Remove-Item -Path \$hostScript -Force -ErrorAction SilentlyContinue
+          \$hostConfig = Join-Path \$env:TEMP "deployment-\$ContainerName.toml"
+          Invoke-Docker -Arguments @('cp', "\$ContainerName`:\$ServerHome/conf/deployment.toml", \$hostConfig)
+
+          \$lines = [System.Collections.Generic.List[string]]::new()
+          \$lines.AddRange([string[]](Get-Content -Path \$hostConfig))
+          \$serverStart = -1
+          for (\$i = 0; \$i -lt \$lines.Count; \$i++) {
+            if (\$lines[\$i] -match '^\\[server\\]\\s*\$') {
+              \$serverStart = \$i
+              break
+            }
+          }
+
+          if (\$serverStart -lt 0) {
+            \$lines.Insert(0, "hostname = `"\$RuntimeName`"")
+            \$lines.Insert(0, '[server]')
+          } else {
+            \$serverEnd = \$lines.Count
+            for (\$i = \$serverStart + 1; \$i -lt \$lines.Count; \$i++) {
+              if (\$lines[\$i] -match '^\\[[^\\]]+\\]\\s*\$') {
+                \$serverEnd = \$i
+                break
+              }
+            }
+
+            \$hostnameIndex = -1
+            for (\$i = \$serverStart + 1; \$i -lt \$serverEnd; \$i++) {
+              if (\$lines[\$i] -match '^\\s*hostname\\s*=') {
+                \$hostnameIndex = \$i
+                break
+              }
+            }
+
+            if (\$hostnameIndex -ge 0) {
+              \$lines[\$hostnameIndex] = "hostname = `"\$RuntimeName`""
+            } else {
+              \$lines.Insert(\$serverStart + 1, "hostname = `"\$RuntimeName`"")
+            }
+          }
+
+          Set-Content -Path \$hostConfig -Value \$lines -Encoding ascii
+          Invoke-Docker -Arguments @('cp', \$hostConfig, "\$ContainerName`:\$ServerHome/conf/deployment.toml")
+          Remove-Item -Path \$hostConfig -Force -ErrorAction SilentlyContinue
         }
         function Import-IcpCertificate {
           param([string]\$ContainerName)
