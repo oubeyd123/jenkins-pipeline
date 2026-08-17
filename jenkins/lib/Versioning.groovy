@@ -144,6 +144,7 @@ def createGitHubRelease(String tag, String releaseName, String changelogBody, St
 }
 """
     def payloadFile = "release-payload-${tag}.json"
+    def responseFile = "github-release-response-${tag}.json"
     writeFile file: payloadFile, text: releasePayload
 
     withCredentials([usernamePassword(
@@ -155,7 +156,9 @@ def createGitHubRelease(String tag, String releaseName, String changelogBody, St
             set -euo pipefail
 
             release_url="https://api.github.com/repos/${repo}/releases/tags/${tag}"
-            status=\$(curl --silent --show-error --retry 5 --retry-delay 3 --retry-connrefused \
+            rm -f '${responseFile}'
+
+            status=\$(curl --silent --show-error --retry 5 --retry-delay 3 --retry-connrefused --retry-all-errors \
               --connect-timeout 20 --max-time 120 \
               --output /dev/null --write-out '%{http_code}' \
               --header "Authorization: Bearer \$GIT_TOKEN" \
@@ -168,9 +171,9 @@ def createGitHubRelease(String tag, String releaseName, String changelogBody, St
               exit 0
             fi
 
-            create_status=\$(curl --silent --show-error --retry 5 --retry-delay 3 --retry-connrefused \
+            create_status=\$(curl --silent --show-error --retry 5 --retry-delay 3 --retry-connrefused --retry-all-errors \
               --connect-timeout 20 --max-time 120 \
-              --output github-release-response.json --write-out '%{http_code}' \
+              --output '${responseFile}' --write-out '%{http_code}' \
               --request POST \
               --header "Authorization: Bearer \$GIT_TOKEN" \
               --header "Accept: application/vnd.github+json" \
@@ -180,7 +183,7 @@ def createGitHubRelease(String tag, String releaseName, String changelogBody, St
             create_status="\${create_status:-000}"
 
             if [ "\$create_status" != "201" ]; then
-              status=\$(curl --silent --show-error --retry 2 --retry-delay 3 --retry-connrefused \
+              status=\$(curl --silent --show-error --retry 2 --retry-delay 3 --retry-connrefused --retry-all-errors \
                 --connect-timeout 20 --max-time 120 \
                 --output /dev/null --write-out '%{http_code}' \
                 --header "Authorization: Bearer \$GIT_TOKEN" \
@@ -193,8 +196,8 @@ def createGitHubRelease(String tag, String releaseName, String changelogBody, St
               fi
 
               echo "Failed to create GitHub Release ${tag}; HTTP \$create_status"
-              if [ -s github-release-response.json ]; then
-                cat github-release-response.json
+              if [ -s '${responseFile}' ]; then
+                cat '${responseFile}'
               fi
               exit 1
             fi
