@@ -14,10 +14,11 @@ from typing import Iterable
 ERROR_PATTERNS = [
     (re.compile(r"Could not read Jenkins console log|consoleText fallback .*failed|consoleText fallback did not return", re.I), "Analyzer / Jenkins"),
     (re.compile(r"\[ERROR\]|BUILD FAILURE|Failed to execute goal|Could not (resolve|transfer) artifact", re.I), "Maven"),
+    (re.compile(r"fatal: unable to access|error fetching remote repo|maximum checkout retry attempts reached|Could not resolve host: github\.com", re.I), "Git"),
     (re.compile(r"trivy|vulnerabilit|security .*failed|CRITICAL|HIGH", re.I), "Security"),
     (re.compile(r"gitleaks|secret", re.I), "Secrets"),
     (re.compile(r"docker .*failed|Cannot connect to the Docker daemon|denied:|unauthorized", re.I), "Docker"),
-    (re.compile(r"nexus|repository|artifact", re.I), "Dependency / Nexus"),
+    (re.compile(r"nexus|Could not (resolve|transfer) artifact|Failed to collect dependencies|dependency resolution", re.I), "Dependency / Nexus"),
     (re.compile(r"wso2|micro integrator|carbon|heartbeat|ICP|PKIX|SSLHandshake", re.I), "WSO2 MI"),
     (re.compile(r"\b(400|401|403|404|500|502|503)\b|Bad Gateway|Unauthorized|Forbidden", re.I), "HTTP"),
     (re.compile(r"Exception|Caused by:|Traceback|script returned exit code|ERROR|FAILURE|failed", re.I), "Generic"),
@@ -28,6 +29,10 @@ NOISE_PATTERNS = [
     re.compile(r"^\[Pipeline\]"),
     re.compile(r"^\s*$"),
     re.compile(r"^\+\s*(set -euo pipefail|command -v)"),
+    re.compile(r"Fetching changes from the remote Git repository", re.I),
+    re.compile(r"Fetching upstream changes from", re.I),
+    re.compile(r"using credential", re.I),
+    re.compile(r"The recommended git tool is:", re.I),
 ]
 
 SECRET_PATTERNS = [

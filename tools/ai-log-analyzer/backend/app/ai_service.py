@@ -14,6 +14,11 @@ CATEGORY_ACTIONS = {
         "Verify image name, Dockerfile path, and registry credentials.",
         "Inspect the failing docker command in the Jenkins log.",
     ],
+    "Git": [
+        "Check network/DNS connectivity from the Jenkins controller or agent to GitHub.",
+        "Verify the Jenkins GitHub credential still has access to the repository.",
+        "Retry after GitHub connectivity works from inside the Jenkins container.",
+    ],
     "Security": [
         "Open the archived security report from Jenkins.",
         "Check whether the finding is a real vulnerability or a policy failure.",
@@ -84,6 +89,8 @@ def infer_root_cause(category: str, message: str) -> str:
         return "A network or TLS connection was interrupted during an external service request."
     if category == "Dependency / Nexus":
         return "Maven could not retrieve a dependency from the configured repository."
+    if category == "Git":
+        return "Jenkins failed while fetching source code from Git."
     if category == "Secrets":
         return "A secret scanner detected sensitive-looking content in the source tree."
     return message
