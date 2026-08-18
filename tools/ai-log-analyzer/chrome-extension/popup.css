@@ -1,0 +1,147 @@
+body {
+  width: 620px;
+  margin: 0;
+  font-family: Arial, sans-serif;
+  color: #172033;
+  background: #eef3f8;
+}
+
+main {
+  padding: 16px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+#count {
+  color: #5d6b7d;
+  font-size: 12px;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 12px;
+  min-height: 360px;
+}
+
+aside,
+.details {
+  min-width: 0;
+}
+
+.list-title {
+  margin-bottom: 8px;
+  color: #5d6b7d;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.history-list {
+  display: grid;
+  gap: 8px;
+  max-height: 430px;
+  overflow-y: auto;
+}
+
+.history-item {
+  width: 100%;
+  min-height: 74px;
+  border: 1px solid #d7e0eb;
+  border-left: 4px solid #8da2bd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  padding: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-item.active {
+  border-color: #2f80ed;
+  border-left-color: #2f80ed;
+  background: #f2f7ff;
+}
+
+.history-main {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.history-meta {
+  margin-top: 4px;
+  color: #5d6b7d;
+  font-size: 12px;
+}
+
+.history-badge {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #eefaf1;
+  color: #246b35;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.card {
+  border: 1px solid #d8e0ec;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.meta {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.summary {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 6px;
+  background: #f4f7fb;
+  overflow-wrap: anywhere;
+}
+
+.known {
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid #b6dfc2;
+  border-radius: 6px;
+  background: #eefaf1;
+}
+
+.known.new {
+  border-color: #d8e0ec;
+  background: #f7f9fc;
+  color: #58667a;
+}
+
+.label {
+  margin-top: 10px;
+  font-weight: 700;
+}
+
+ol {
+  padding-left: 20px;
+}
+
+.empty {
+  border: 1px dashed #b8c7da;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}

@@ -54,7 +54,6 @@ For each changed API, Jenkins runs:
 
 ```text
 Validate
-SonarQube Scan, optional
 Gitleaks + Trivy filesystem scan
 Build CAR
 Docker build check
@@ -85,7 +84,6 @@ xmllint
 yamllint
 gitleaks
 trivy
-SonarQube Scanner Jenkins tool, optional
 ```
 
 Windows Docker agent:
@@ -123,7 +121,6 @@ This starts:
 ```text
 jenkins
 nexus
-sonarqube
 integration-control-plane
 prometheus
 grafana
@@ -135,7 +132,6 @@ Service URLs:
 |---------|-----|
 | Jenkins | `http://localhost:8080` |
 | Nexus | `http://localhost:8081` |
-| SonarQube | `http://localhost:9000` |
 | Integration Control Plane | `https://localhost:9446` |
 | Prometheus | `http://localhost:9090` |
 | Grafana | `http://localhost:3000` |
@@ -215,63 +211,6 @@ Jenkins Maven settings must contain Nexus credentials:
 
 ```text
 /var/jenkins_home/.m2/settings.xml
-```
-
-### SonarQube
-
-SonarQube is optional and disabled by default. Use it for source quality, bugs, duplicated code, maintainability, and quality gates.
-
-Run SonarQube locally:
-
-```powershell
-docker volume create sonarqube-data
-docker volume create sonarqube-extensions
-docker volume create sonarqube-logs
-
-docker run -d --name sonarqube `
-  -p 9000:9000 `
-  -v sonarqube-data:/opt/sonarqube/data `
-  -v sonarqube-extensions:/opt/sonarqube/extensions `
-  -v sonarqube-logs:/opt/sonarqube/logs `
-  sonarqube:lts-community
-```
-
-Open:
-
-```text
-http://localhost:9000
-```
-
-Create a SonarQube token, then add it to Jenkins Credentials:
-
-```text
-Credential type: Secret text
-Credential ID:   sonarqube-token
-```
-
-Enable SonarQube in `jenkins/config/pipeline.properties`:
-
-```text
-SONAR_ENABLED=true
-SONAR_HOST_URL=http://host.docker.internal:9000
-SONAR_SERVER_NAME=SonarQube
-SONAR_SCANNER_TOOL=SonarScanner
-SONAR_TOKEN_CRED_ID=sonarqube-token
-SONAR_QUALITY_GATE=report
-```
-
-Quality gate modes:
-
-```text
-report  -> run scan and report result without blocking the pipeline
-enforce -> wait for the SonarQube quality gate and fail if it fails
-```
-
-Recommended rollout:
-
-```text
-develop: SONAR_QUALITY_GATE=report
-main:    SONAR_QUALITY_GATE=enforce, after reports are clean
 ```
 
 ### Integration Control Plane
@@ -558,7 +497,6 @@ Quality checks:
 mvn validate
 xmllint for WSO2 XML files
 yamllint for developer-written YAML files
-SonarQube scan, optional
 ```
 
 Security checks:
@@ -583,6 +521,31 @@ Reports are archived under:
 ```text
 target/security-reports/
 ```
+
+## AI Failure Analysis
+
+The project includes an optional AI CI/CD Log Analyzer under:
+
+```text
+tools/ai-log-analyzer
+```
+
+When Jenkins fails, the `post { failure { ... } }` block extracts the important console-log error sections, redacts common secrets, archives the extracted JSON, and sends it to the backend when this variable is configured:
+
+```text
+AI_ANALYZER_URL=http://ai-log-analyzer:8000
+```
+
+Backend endpoints:
+
+```text
+POST /api/analyze
+GET  /api/latest-failure
+GET  /api/failures
+GET  /api/failures/{id}
+```
+
+The first version stores results in SQLite and uses a local deterministic analyzer. A real AI provider can be connected later from the backend without exposing API keys to Jenkins or the Chrome extension.
 
 ## Trivy Cache
 
@@ -689,7 +652,6 @@ Monitoring is for Jenkins health, not WSO2 business traffic.
 ```text
 github-token      -> GitHub token for tags/releases
 dockerhub-token   -> Docker Hub token for image push
-sonarqube-token   -> SonarQube token, optional
 Nexus credentials -> stored in Maven settings.xml
 ```
 
