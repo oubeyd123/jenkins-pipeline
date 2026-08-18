@@ -13,7 +13,12 @@ def call() {
 
     sh """
         set -euo pipefail
-        python3 tools/ai-log-analyzer/extract_errors.py \
+        PYTHON_BIN="\$(command -v python3 || command -v python || true)"
+        if [ -z "\${PYTHON_BIN}" ]; then
+          echo "python3/python is required for AI failure extraction but was not found"
+          exit 1
+        fi
+        "\${PYTHON_BIN}" tools/ai-log-analyzer/extract_errors.py \
           --input '${logFile}' \
           --output '${extractedFile}' \
           --pipeline '${env.JOB_NAME ?: ''}' \
@@ -26,6 +31,7 @@ def call() {
     archiveArtifacts allowEmptyArchive: true, artifacts: "${reportDir}/*.json"
 
     if ((env.AI_ANALYZER_URL ?: '').trim()) {
+        echo "Sending AI failure analysis to ${env.AI_ANALYZER_URL}/api/analyze"
         sh """
             set -euo pipefail
             curl --silent --show-error --retry 3 --retry-delay 2 --retry-connrefused \
@@ -34,6 +40,8 @@ def call() {
               --data @'${extractedFile}' \
               '${env.AI_ANALYZER_URL}/api/analyze' \
               --output '${reportDir}/analysis-response.json'
+            echo "AI analyzer response:"
+            cat '${reportDir}/analysis-response.json'
         """
         archiveArtifacts allowEmptyArchive: true, artifacts: "${reportDir}/analysis-response.json"
     } else {

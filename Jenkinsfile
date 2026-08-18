@@ -301,8 +301,20 @@ pipeline {
             echo "Failed: branch=${env.BRANCH_NAME ?: 'n/a'} commit=${env.GIT_COMMIT ?: 'n/a'}"
             script {
                 try {
-                    def aiFailureAnalysis = load 'jenkins/lib/aiFailureAnalysis.groovy'
-                    aiFailureAnalysis()
+                    node(env.BUILD_AGENT_LABEL ?: 'built-in') {
+                        if (!fileExists('jenkins/lib/aiFailureAnalysis.groovy')) {
+                            checkout scm
+                        }
+                        if (!fileExists('jenkins/lib/aiFailureAnalysis.groovy')) {
+                            error 'AI failure analysis script is missing from the workspace'
+                        }
+                        if (!((env.AI_ANALYZER_URL ?: '').trim()) && fileExists('jenkins/config/pipeline.properties')) {
+                            def pipelineConfig = load 'jenkins/lib/pipelineConfig.groovy'
+                            pipelineConfig()
+                        }
+                        def aiFailureAnalysis = load 'jenkins/lib/aiFailureAnalysis.groovy'
+                        aiFailureAnalysis()
+                    }
                 } catch (err) {
                     echo "AI failure analysis could not run: ${err.message}"
                 }
