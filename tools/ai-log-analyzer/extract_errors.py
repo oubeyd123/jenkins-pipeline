@@ -12,6 +12,7 @@ from typing import Iterable
 
 
 ERROR_PATTERNS = [
+    (re.compile(r"Could not read Jenkins console log|consoleText fallback .*failed|consoleText fallback did not return", re.I), "Analyzer / Jenkins"),
     (re.compile(r"\[ERROR\]|BUILD FAILURE|Failed to execute goal|Could not (resolve|transfer) artifact", re.I), "Maven"),
     (re.compile(r"trivy|vulnerabilit|security .*failed|CRITICAL|HIGH", re.I), "Security"),
     (re.compile(r"gitleaks|secret", re.I), "Secrets"),

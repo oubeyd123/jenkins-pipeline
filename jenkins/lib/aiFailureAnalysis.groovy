@@ -8,8 +8,27 @@ def call() {
     try {
         writeFile file: logFile, text: currentBuild.rawBuild.getLog(20000).join('\n')
     } catch (err) {
+        echo "Could not read Jenkins console log from currentBuild.rawBuild: ${err.message}"
         writeFile file: logFile, text: "Could not read Jenkins console log from currentBuild.rawBuild: ${err.message}\n"
     }
+
+    sh """
+        set -euo pipefail
+        if grep -q '^Could not read Jenkins console log from currentBuild.rawBuild:' '${logFile}' && [ -n "\${BUILD_URL:-}" ]; then
+          echo "Trying Jenkins consoleText fallback from \${BUILD_URL}consoleText"
+          if curl --silent --show-error --max-time 30 "\${BUILD_URL}consoleText" --output '${reportDir}/consoleText.tmp'; then
+            if [ -s '${reportDir}/consoleText.tmp' ] && ! grep -qi '<html' '${reportDir}/consoleText.tmp'; then
+              mv '${reportDir}/consoleText.tmp' '${logFile}'
+              echo "Jenkins consoleText fallback captured successfully"
+            else
+              echo "Jenkins consoleText fallback did not return plain log text"
+              rm -f '${reportDir}/consoleText.tmp'
+            fi
+          else
+            echo "Jenkins consoleText fallback request failed"
+          fi
+        fi
+    """
 
     sh """
         set -euo pipefail

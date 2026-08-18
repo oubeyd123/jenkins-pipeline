@@ -34,6 +34,11 @@ CATEGORY_ACTIONS = {
         "Retry if the error is transient.",
         "Verify proxy, Docker network, and external service availability.",
     ],
+    "Analyzer / Jenkins": [
+        "Check whether Jenkins allowed the pipeline to read the console log.",
+        "Open the archived target/ai-failure files to see what was captured.",
+        "Approve the required Jenkins script method or enable the consoleText fallback.",
+    ],
 }
 
 
