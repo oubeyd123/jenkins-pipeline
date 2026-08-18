@@ -70,24 +70,6 @@ def applyConfigValue(String key, String value) {
         case 'TRIVY_TIMEOUT':
             env.TRIVY_TIMEOUT = value
             break
-        case 'SONAR_ENABLED':
-            env.SONAR_ENABLED = value
-            break
-        case 'SONAR_HOST_URL':
-            env.SONAR_HOST_URL = value
-            break
-        case 'SONAR_SERVER_NAME':
-            env.SONAR_SERVER_NAME = value
-            break
-        case 'SONAR_SCANNER_TOOL':
-            env.SONAR_SCANNER_TOOL = value
-            break
-        case 'SONAR_TOKEN_CRED_ID':
-            env.SONAR_TOKEN_CRED_ID = value
-            break
-        case 'SONAR_QUALITY_GATE':
-            env.SONAR_QUALITY_GATE = value
-            break
         case 'ICP_URL':
             env.ICP_URL = value
             break
@@ -117,6 +99,9 @@ def applyConfigValue(String key, String value) {
             break
         case 'MI_TRUSTSTORE_PASSWORD':
             env.MI_TRUSTSTORE_PASSWORD = value
+            break
+        case 'AI_ANALYZER_URL':
+            env.AI_ANALYZER_URL = value
             break
         case 'FAILURE_EMAIL_RECIPIENTS':
             env.FAILURE_EMAIL_RECIPIENTS = value

@@ -59,11 +59,6 @@ pipeline {
                                     quality(api.path)
                                 }
 
-                                stage("SonarQube Scan: ${api.slug}") {
-                                    def sonar = load 'jenkins/lib/sonarQubeScan.groovy'
-                                    sonar(apiPath: api.path, apiSlug: api.slug)
-                                }
-
                                 stage("Security Scan: ${api.slug}") {
                                     def security = load 'jenkins/lib/securityChecks.groovy'
                                     security.fs("apis/${api.path}", api.slug)
@@ -158,11 +153,6 @@ pipeline {
                             stage("Validate: ${api.slug}") {
                                 def quality = load 'jenkins/lib/qualityChecks.groovy'
                                 quality(api.path)
-                            }
-
-                            stage("SonarQube Scan: ${api.slug}") {
-                                def sonar = load 'jenkins/lib/sonarQubeScan.groovy'
-                                sonar(apiPath: api.path, apiSlug: api.slug)
                             }
 
                             stage("Security Scan: ${api.slug}") {
@@ -310,6 +300,13 @@ pipeline {
         failure {
             echo "Failed: branch=${env.BRANCH_NAME ?: 'n/a'} commit=${env.GIT_COMMIT ?: 'n/a'}"
             script {
+                try {
+                    def aiFailureAnalysis = load 'jenkins/lib/aiFailureAnalysis.groovy'
+                    aiFailureAnalysis()
+                } catch (err) {
+                    echo "AI failure analysis could not run: ${err.message}"
+                }
+
                 if ((env.FAILURE_EMAIL_RECIPIENTS ?: '').trim()) {
                     try {
                         def failureDescription = "Pipeline failed with result ${currentBuild.currentResult ?: 'FAILURE'} on branch ${env.BRANCH_NAME ?: 'n/a'}."

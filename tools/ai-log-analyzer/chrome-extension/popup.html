@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>CI/CD Error Analyzer</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>CI/CD Error Analyzer</h1>
+        <span id="count">0 failures</span>
+      </header>
+      <section class="layout">
+        <aside>
+          <div class="list-title">Failure History</div>
+          <div id="history" class="history-list">Loading...</div>
+        </aside>
+        <section id="content" class="details">Loading latest failure...</section>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

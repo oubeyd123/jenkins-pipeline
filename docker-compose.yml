@@ -18,17 +18,6 @@ services:
       - nexus_data:/nexus-data
     restart: unless-stopped
 
-  sonarqube:
-    image: sonarqube:community
-    container_name: sonarqube
-    ports:
-      - "9000:9000"
-    volumes:
-      - sonarqube_data:/opt/sonarqube/data
-      - sonarqube_extensions:/opt/sonarqube/extensions
-      - sonarqube_logs:/opt/sonarqube/logs
-    restart: unless-stopped
-
   integration-control-plane:
     image: wso2/wso2-integration-control-plane:2.0.0-rocky
     container_name: integration-control-plane
@@ -37,6 +26,18 @@ services:
       - "9445:9445"
     volumes:
       - icp_data:/home/wso2carbon/wso2-integration-control-plane/repository/database
+    restart: unless-stopped
+
+  ai-log-analyzer:
+    build:
+      context: ./tools/ai-log-analyzer/backend
+    container_name: ai-log-analyzer
+    env_file:
+      - ./tools/ai-log-analyzer/backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ai_log_analyzer_data:/app/data
     restart: unless-stopped
 
   prometheus:
@@ -66,13 +67,12 @@ services:
 volumes:
   jenkins_home:
   nexus_data:
-  sonarqube_data:
-  sonarqube_extensions:
-  sonarqube_logs:
   icp_data:
+  ai_log_analyzer_data:
   prometheus_data:
   grafana_data:
 
 networks:
   default:
     name: wso2-mi-net
+    external: true
