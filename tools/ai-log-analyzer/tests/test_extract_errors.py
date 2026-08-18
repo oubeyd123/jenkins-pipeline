@@ -41,3 +41,19 @@ Caused by: Connection refused
 
     assert errors
     assert errors[0]["type"] == "Maven"
+
+
+def test_xml_command_noise_does_not_hide_parser_error():
+    log = """
+[2026-08-18T16:03:11.578Z] + find src/main/wso2mi -name *.xml -print0
+[2026-08-18T16:03:11.578Z] + xargs -0 -r xmllint --noout
+[2026-08-18T16:03:11.578Z] src/main/wso2mi/artifacts/apis/bonjour.xml:7: parser error : Opening and ending tag mismatch: format line 7 and format-broken
+[2026-08-18T16:03:11.578Z]                 <format>{message: 'bonjour'}</format-broken>
+[2026-08-18T16:03:11.578Z]                                                             ^
+"""
+
+    errors = extract_errors(log)
+
+    assert errors
+    assert errors[0]["type"] == "XML Validation"
+    assert errors[0]["message"].startswith("src/main/wso2mi/artifacts/apis/bonjour.xml:7")

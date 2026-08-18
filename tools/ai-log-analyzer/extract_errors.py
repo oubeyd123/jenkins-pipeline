@@ -13,13 +13,14 @@ from typing import Iterable
 
 ERROR_PATTERNS = [
     (re.compile(r"Could not read Jenkins console log|consoleText fallback .*failed|consoleText fallback did not return", re.I), "Analyzer / Jenkins"),
+    (re.compile(r"parser error|Opening and ending tag mismatch|Premature end of data|xmlParse|xmllint", re.I), "XML Validation"),
     (re.compile(r"\[ERROR\]|BUILD FAILURE|Failed to execute goal|Could not (resolve|transfer) artifact", re.I), "Maven"),
     (re.compile(r"fatal: unable to access|error fetching remote repo|maximum checkout retry attempts reached|Could not resolve host: github\.com", re.I), "Git"),
     (re.compile(r"trivy|vulnerabilit|security .*failed|CRITICAL|HIGH", re.I), "Security"),
     (re.compile(r"gitleaks|secret", re.I), "Secrets"),
     (re.compile(r"docker .*failed|Cannot connect to the Docker daemon|denied:|unauthorized", re.I), "Docker"),
     (re.compile(r"nexus|Could not (resolve|transfer) artifact|Failed to collect dependencies|dependency resolution", re.I), "Dependency / Nexus"),
-    (re.compile(r"wso2|micro integrator|carbon|heartbeat|ICP|PKIX|SSLHandshake", re.I), "WSO2 MI"),
+    (re.compile(r"micro integrator|heartbeat|ICP|PKIX|SSLHandshake", re.I), "WSO2 MI"),
     (re.compile(r"\b(400|401|403|404|500|502|503)\b|Bad Gateway|Unauthorized|Forbidden", re.I), "HTTP"),
     (re.compile(r"Exception|Caused by:|Traceback|script returned exit code|ERROR|FAILURE|failed", re.I), "Generic"),
     (re.compile(r"Could not resolve host|connection refused|timed out|unexpected eof|TLS connect error", re.I), "Network"),
@@ -28,7 +29,7 @@ ERROR_PATTERNS = [
 NOISE_PATTERNS = [
     re.compile(r"^\[Pipeline\]"),
     re.compile(r"^\s*$"),
-    re.compile(r"^\+\s*(set -euo pipefail|command -v)"),
+    re.compile(r"^(?:\[[^\]]+\]\s*)?\+\s+"),
     re.compile(r"Fetching changes from the remote Git repository", re.I),
     re.compile(r"Fetching upstream changes from", re.I),
     re.compile(r"using credential", re.I),
@@ -53,6 +54,7 @@ def redact(text: str) -> str:
 
 def clean_line(line: str) -> str:
     line = re.sub(r"^\d{2}:\d{2}:\d{2}\s+", "", line)
+    line = re.sub(r"^\[\d{4}-\d{2}-\d{2}T[^\]]+\]\s+", "", line)
     return redact(line.rstrip())
 
 
@@ -69,6 +71,8 @@ def classify(line: str) -> str:
 
 def matching_lines(lines: list[str]) -> Iterable[tuple[int, str]]:
     for index, line in enumerate(lines):
+        if is_noise(line):
+            continue
         if any(pattern.search(line) for pattern, _ in ERROR_PATTERNS):
             yield index, classify(line)
 

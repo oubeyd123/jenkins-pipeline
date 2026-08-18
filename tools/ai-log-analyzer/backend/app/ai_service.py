@@ -44,6 +44,11 @@ CATEGORY_ACTIONS = {
         "Open the archived target/ai-failure files to see what was captured.",
         "Approve the required Jenkins script method or enable the consoleText fallback.",
     ],
+    "XML Validation": [
+        "Open the XML file and go to the line reported by xmllint.",
+        "Fix the mismatched, missing, or malformed XML tag.",
+        "Run xmllint locally or rerun the Jenkins validation stage.",
+    ],
 }
 
 
@@ -91,6 +96,8 @@ def infer_root_cause(category: str, message: str) -> str:
         return "Maven could not retrieve a dependency from the configured repository."
     if category == "Git":
         return "Jenkins failed while fetching source code from Git."
+    if category == "XML Validation":
+        return "An XML file failed validation, usually because a tag is malformed or not closed correctly."
     if category == "Secrets":
         return "A secret scanner detected sensitive-looking content in the source tree."
     return message
