@@ -7,13 +7,16 @@
   </head>
   <body>
     <main>
-      <header>
-        <h1>CI/CD Error Analyzer</h1>
-        <span id="count">0 failures</span>
+      <header class="app-header">
+        <div>
+          <div class="eyebrow">Jenkins Assistant</div>
+          <h1>CI/CD Error Analyzer</h1>
+        </div>
+        <span id="count" class="count-pill">0 failures</span>
       </header>
       <section class="layout">
         <aside>
-          <div class="list-title">Failure History</div>
+          <div class="panel-title">Failure History</div>
           <div id="history" class="history-list">Loading...</div>
         </aside>
         <section id="content" class="details">Loading latest failure...</section>

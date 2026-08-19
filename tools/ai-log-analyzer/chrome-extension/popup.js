@@ -36,13 +36,16 @@ function renderHistory() {
       const isActive = failure.id === selectedId ? " active" : "";
       const known = analysis.known_error
         ? `<span class="history-badge">${escapeHtml(analysis.occurrence_count)} times</span>`
-        : `<span class="history-badge">new</span>`;
+        : `<span class="history-badge new">new</span>`;
       return `
         <button class="history-item${isActive}" type="button" data-id="${escapeHtml(failure.id)}">
           <div class="history-main">${escapeHtml(displayText(failure.pipeline || "unknown-pipeline"))}</div>
           <div class="history-meta">Build #${escapeHtml(failure.build_number || "n/a")} | ${escapeHtml(displayText(failure.branch || "n/a"))}</div>
-          <div class="history-meta">${escapeHtml(analysis.category || "Generic")} | ${escapeHtml(analysis.stage || failure.stage || "unknown")}</div>
-          ${known}
+          <div class="history-meta">${escapeHtml(analysis.stage || failure.stage || "unknown")}</div>
+          <div class="history-row">
+            <span class="category-badge">${escapeHtml(analysis.category || "Generic")}</span>
+            ${known}
+          </div>
         </button>
       `;
     })
@@ -67,25 +70,56 @@ function renderSelectedFailure() {
   const failure = failures.find((item) => item.id === selectedId) || failures[0];
   const analysis = failure.ai_analysis || {};
   const actions = analysis.suggested_actions || [];
+  const confidence = Math.round((analysis.confidence || 0) * 100);
   content.innerHTML = `
     <div class="card">
-      <div class="meta">
-        <div><strong>Pipeline:</strong> ${escapeHtml(displayText(failure.pipeline))}</div>
-        <div><strong>Build:</strong> #${escapeHtml(failure.build_number)}</div>
-        <div><strong>Failure ID:</strong> ${escapeHtml(failure.id)}</div>
-        <div><strong>Branch:</strong> ${escapeHtml(displayText(failure.branch || "n/a"))}</div>
-        <div><strong>Stage:</strong> ${escapeHtml(analysis.stage || failure.stage || "unknown")}</div>
-        <div><strong>Status:</strong> ${escapeHtml(failure.status)}</div>
+      <div class="detail-header">
+        <div class="detail-title">
+          <h2>${escapeHtml(analysis.root_cause || "Unknown failure")}</h2>
+          <div class="detail-subtitle">Failure ID ${escapeHtml(failure.id)} | Build #${escapeHtml(failure.build_number)}</div>
+        </div>
+        <span class="status-badge">${escapeHtml(failure.status || "FAILED")}</span>
       </div>
-      <div class="summary">${escapeHtml(analysis.summary || "No summary available.")}</div>
-      ${renderKnownError(analysis)}
-      <div class="label">Root Cause</div>
-      <div>${escapeHtml(analysis.root_cause || "Unknown")}</div>
-      <div class="label">Explanation</div>
-      <div>${escapeHtml(analysis.explanation || "No explanation available.")}</div>
-      <div class="label">Suggested Fix</div>
-      <ol>${actions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
-      <div><strong>Confidence:</strong> ${Math.round((analysis.confidence || 0) * 100)}%</div>
+      <div class="meta-grid">
+        ${renderMeta("Pipeline", displayText(failure.pipeline))}
+        ${renderMeta("Branch", displayText(failure.branch || "n/a"))}
+        ${renderMeta("Stage", analysis.stage || failure.stage || "unknown")}
+        ${renderMeta("Category", analysis.category || "Generic")}
+      </div>
+      <div class="detail-body">
+        <div class="summary">${escapeHtml(analysis.summary || "No summary available.")}</div>
+        ${renderKnownError(analysis)}
+        ${renderSection("Explanation", analysis.explanation || "No explanation available.")}
+        <div class="section">
+          <div class="section-label">Suggested Fix</div>
+          <ol class="actions-list">${actions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
+        </div>
+        <div class="section confidence">
+          <div>
+            <div class="section-label">Confidence</div>
+            <div class="confidence-track"><div class="confidence-fill" style="width: ${escapeHtml(confidence)}%"></div></div>
+          </div>
+          <strong>${escapeHtml(confidence)}%</strong>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderMeta(label, value) {
+  return `
+    <div class="meta-item">
+      <div class="meta-label">${escapeHtml(label)}</div>
+      <div class="meta-value">${escapeHtml(value || "n/a")}</div>
+    </div>
+  `;
+}
+
+function renderSection(label, value) {
+  return `
+    <div class="section">
+      <div class="section-label">${escapeHtml(label)}</div>
+      <div class="section-content">${escapeHtml(value)}</div>
     </div>
   `;
 }
@@ -97,8 +131,8 @@ function renderKnownError(analysis) {
   return `
     <div class="known">
       This error has occurred ${escapeHtml(analysis.occurrence_count)} times.
-      <div class="label">Previous Solution</div>
-      <div>${escapeHtml(analysis.previous_solution || (analysis.suggested_actions || []).join("\\n"))}</div>
+      <div class="section-label">Previous Solution</div>
+      <div class="section-content">${escapeHtml(analysis.previous_solution || (analysis.suggested_actions || []).join("\\n"))}</div>
     </div>
   `;
 }

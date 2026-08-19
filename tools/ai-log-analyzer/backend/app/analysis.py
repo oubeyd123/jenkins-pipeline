@@ -8,6 +8,7 @@ from .database import (
     increment_previous_error,
     insert_failure,
     save_new_previous_error,
+    update_previous_error_analysis,
 )
 from .fingerprint import fingerprint_error, redact
 
@@ -22,6 +23,7 @@ def analyze_and_store(payload: dict[str, Any]) -> dict[str, Any]:
         if previous:
             previous = increment_previous_error(fingerprint) or previous
             result = dict(previous["analysis"])
+            result = refresh_generic_known_analysis(result, payload, fingerprint)
             result.update(
                 {
                     "known_error": True,
@@ -58,3 +60,16 @@ def redact_payload(payload: dict[str, Any]) -> dict[str, Any]:
         errors.append(clean_error)
     redacted["errors"] = errors
     return redacted
+
+
+def refresh_generic_known_analysis(result: dict[str, Any], payload: dict[str, Any], fingerprint: str) -> dict[str, Any]:
+    explanation = str(result.get("explanation", ""))
+    if "earliest high-signal error block" not in explanation:
+        return result
+
+    refreshed = analyze(payload)
+    if refreshed.get("explanation") == explanation:
+        return result
+
+    update_previous_error_analysis(fingerprint, refreshed)
+    return refreshed

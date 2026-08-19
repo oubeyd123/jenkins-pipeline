@@ -125,6 +125,29 @@ def save_new_previous_error(fingerprint: str, error_type: str, analysis: dict[st
         )
 
 
+def update_previous_error_analysis(fingerprint: str, analysis: dict[str, Any]) -> None:
+    solution = "\n".join(analysis.get("suggested_actions", []))
+    with connect() as conn:
+        conn.execute(
+            """
+            UPDATE previous_errors
+            SET error_type = ?,
+                root_cause = ?,
+                solution = ?,
+                analysis = ?,
+                last_seen = CURRENT_TIMESTAMP
+            WHERE fingerprint = ?
+            """,
+            (
+                analysis.get("category", "Generic"),
+                analysis.get("root_cause", ""),
+                solution,
+                json.dumps(analysis),
+                fingerprint,
+            ),
+        )
+
+
 def increment_previous_error(fingerprint: str) -> dict[str, Any] | None:
     with connect() as conn:
         conn.execute(
