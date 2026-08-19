@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from typing import Any
+from urllib.parse import unquote
 
 
 CATEGORY_ACTIONS = {
@@ -62,9 +64,37 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
     primary = errors[0] if errors else {}
     category = primary.get("type", "Generic")
     message = primary.get("message", "Pipeline failed, but no clear error block was extracted.")
-    stage = payload.get("stage") or "unknown"
+    stage = primary.get("stage") or payload.get("stage") or "unknown"
+    pipeline = unquote(str(payload.get("pipeline", "Pipeline")))
 
-    actions = CATEGORY_ACTIONS.get(
+    actions = suggested_actions(category, message)
+
+    return {
+        "summary": f"{pipeline} failed: {message}",
+        "root_cause": infer_root_cause(category, message),
+        "category": category,
+        "stage": stage,
+        "confidence": 0.72 if errors else 0.35,
+        "explanation": explain(category, message),
+        "suggested_actions": actions,
+    }
+
+
+def suggested_actions(category: str, message: str) -> list[str]:
+    if category == "XML Validation":
+        file_line = extract_file_line(message)
+        actions = []
+        if file_line:
+            actions.append(f"Open {file_line}.")
+        actions.extend(
+            [
+                "Fix the mismatched, missing, or malformed XML tag.",
+                "Run xmllint locally or rerun the Jenkins validation stage.",
+            ]
+        )
+        return actions
+
+    return CATEGORY_ACTIONS.get(
         category,
         [
             "Open the extracted error block and identify the first failing command.",
@@ -73,15 +103,17 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
         ],
     )
 
-    return {
-        "summary": f"{payload.get('pipeline', 'Pipeline')} failed: {message}",
-        "root_cause": infer_root_cause(category, message),
-        "category": category,
-        "stage": stage,
-        "confidence": 0.72 if errors else 0.35,
-        "explanation": "The analyzer selected the earliest high-signal error block and classified it by tool-specific patterns.",
-        "suggested_actions": actions,
-    }
+
+def explain(category: str, message: str) -> str:
+    if category == "XML Validation":
+        mismatch = re.search(r"Opening and ending tag mismatch:\s*([^\s]+).* and ([^\s]+)", message)
+        if mismatch:
+            return (
+                f"The XML validation step failed because the file opens <{mismatch.group(1)}> "
+                f"but closes with </{mismatch.group(2)}>."
+            )
+        return "The XML validation step failed because one XML file is malformed."
+    return "The analyzer selected the earliest high-signal error block and classified it by tool-specific patterns."
 
 
 def infer_root_cause(category: str, message: str) -> str:
@@ -101,3 +133,10 @@ def infer_root_cause(category: str, message: str) -> str:
     if category == "Secrets":
         return "A secret scanner detected sensitive-looking content in the source tree."
     return message
+
+
+def extract_file_line(message: str) -> str:
+    match = re.search(r"([^:\s]+\.xml):(\d+)", message)
+    if not match:
+        return ""
+    return f"{match.group(1)} at line {match.group(2)}"

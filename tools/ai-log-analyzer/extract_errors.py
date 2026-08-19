@@ -11,6 +11,12 @@ from pathlib import Path
 from typing import Iterable
 
 
+STAGE_PATTERNS = [
+    re.compile(r"^\[Pipeline\]\s+\{\s+\(([^)]+)\)"),
+    re.compile(r"Entering stage ['\"]([^'\"]+)['\"]", re.I),
+    re.compile(r"Stage ['\"]([^'\"]+)['\"]", re.I),
+]
+
 ERROR_PATTERNS = [
     (re.compile(r"Could not read Jenkins console log|consoleText fallback .*failed|consoleText fallback did not return", re.I), "Analyzer / Jenkins"),
     (re.compile(r"parser error|Opening and ending tag mismatch|Premature end of data|xmlParse|xmllint", re.I), "XML Validation"),
@@ -69,6 +75,19 @@ def classify(line: str) -> str:
     return "Generic"
 
 
+def stage_by_line(lines: list[str]) -> list[str]:
+    stages = []
+    current_stage = "unknown"
+    for line in lines:
+        for pattern in STAGE_PATTERNS:
+            match = pattern.search(line)
+            if match:
+                current_stage = match.group(1).strip()
+                break
+        stages.append(current_stage)
+    return stages
+
+
 def matching_lines(lines: list[str]) -> Iterable[tuple[int, str]]:
     for index, line in enumerate(lines):
         if is_noise(line):
@@ -77,34 +96,40 @@ def matching_lines(lines: list[str]) -> Iterable[tuple[int, str]]:
             yield index, classify(line)
 
 
-def merge_windows(windows: list[tuple[int, int, str]]) -> list[tuple[int, int, str]]:
+def merge_windows(windows: list[tuple[int, int, str, str]]) -> list[tuple[int, int, str, str]]:
     if not windows:
         return []
 
     windows.sort(key=lambda item: item[0])
-    merged: list[tuple[int, int, str]] = [windows[0]]
-    for start, end, error_type in windows[1:]:
-        last_start, last_end, last_type = merged[-1]
+    merged: list[tuple[int, int, str, str]] = [windows[0]]
+    for start, end, error_type, stage in windows[1:]:
+        last_start, last_end, last_type, last_stage = merged[-1]
         if start <= last_end:
-            merged[-1] = (last_start, max(last_end, end), last_type if last_type != "Generic" else error_type)
+            merged[-1] = (
+                last_start,
+                max(last_end, end),
+                last_type if last_type != "Generic" else error_type,
+                last_stage if last_stage != "unknown" else stage,
+            )
         else:
-            merged.append((start, end, error_type))
+            merged.append((start, end, error_type, stage))
     return merged
 
 
 def extract_errors(log_text: str, before: int = 15, after: int = 15, max_errors: int = 8) -> list[dict]:
     raw_lines = log_text.splitlines()
     lines = [clean_line(line) for line in raw_lines]
+    stages = stage_by_line(lines)
     windows = []
 
     for index, error_type in matching_lines(lines):
         start = max(0, index - before)
         end = min(len(lines), index + after + 1)
-        windows.append((start, end, error_type))
+        windows.append((start, end, error_type, stages[index]))
 
     errors = []
     seen = set()
-    for start, end, error_type in merge_windows(windows):
+    for start, end, error_type, stage in merge_windows(windows):
         context_lines = [line for line in lines[start:end] if not is_noise(line)]
         context = "\n".join(context_lines).strip()
         if not context:
@@ -127,6 +152,7 @@ def extract_errors(log_text: str, before: int = 15, after: int = 15, max_errors:
                 "message": first_message[:300],
                 "line_start": start + 1,
                 "line_end": end,
+                "stage": stage,
                 "context": context[:6000],
             }
         )
@@ -149,14 +175,15 @@ def main() -> int:
     args = parser.parse_args()
 
     log_text = Path(args.input).read_text(encoding="utf-8", errors="replace")
+    errors = extract_errors(log_text)
     payload = {
         "pipeline": args.pipeline,
         "build_number": args.build_number,
         "branch": args.branch,
         "commit": args.commit,
-        "stage": args.stage,
+        "stage": errors[0].get("stage", args.stage) if errors and args.stage == "unknown" else args.stage,
         "status": args.status,
-        "errors": extract_errors(log_text),
+        "errors": errors,
     }
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(json.dumps(payload, indent=2), encoding="utf-8")

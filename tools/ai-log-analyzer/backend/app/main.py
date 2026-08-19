@@ -19,6 +19,7 @@ class ErrorBlock(BaseModel):
     context: str
     line_start: int | None = None
     line_end: int | None = None
+    stage: str = "unknown"
 
 
 class AnalyzeRequest(BaseModel):

@@ -39,8 +39,8 @@ function renderHistory() {
         : `<span class="history-badge">new</span>`;
       return `
         <button class="history-item${isActive}" type="button" data-id="${escapeHtml(failure.id)}">
-          <div class="history-main">${escapeHtml(failure.pipeline || "unknown-pipeline")}</div>
-          <div class="history-meta">Build #${escapeHtml(failure.build_number || "n/a")} | ${escapeHtml(failure.branch || "n/a")}</div>
+          <div class="history-main">${escapeHtml(displayText(failure.pipeline || "unknown-pipeline"))}</div>
+          <div class="history-meta">Build #${escapeHtml(failure.build_number || "n/a")} | ${escapeHtml(displayText(failure.branch || "n/a"))}</div>
           <div class="history-meta">${escapeHtml(analysis.category || "Generic")} | ${escapeHtml(analysis.stage || failure.stage || "unknown")}</div>
           ${known}
         </button>
@@ -70,10 +70,10 @@ function renderSelectedFailure() {
   content.innerHTML = `
     <div class="card">
       <div class="meta">
-        <div><strong>Pipeline:</strong> ${escapeHtml(failure.pipeline)}</div>
+        <div><strong>Pipeline:</strong> ${escapeHtml(displayText(failure.pipeline))}</div>
         <div><strong>Build:</strong> #${escapeHtml(failure.build_number)}</div>
         <div><strong>Failure ID:</strong> ${escapeHtml(failure.id)}</div>
-        <div><strong>Branch:</strong> ${escapeHtml(failure.branch || "n/a")}</div>
+        <div><strong>Branch:</strong> ${escapeHtml(displayText(failure.branch || "n/a"))}</div>
         <div><strong>Stage:</strong> ${escapeHtml(analysis.stage || failure.stage || "unknown")}</div>
         <div><strong>Status:</strong> ${escapeHtml(failure.status)}</div>
       </div>
@@ -110,6 +110,14 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function displayText(value) {
+  try {
+    return decodeURIComponent(String(value ?? ""));
+  } catch {
+    return String(value ?? "");
+  }
 }
 
 loadFailures();
