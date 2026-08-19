@@ -1,27 +1,45 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <title>CI/CD Error Analyzer</title>
-    <link rel="stylesheet" href="popup.css">
+    <meta charset="utf-8" />
+    <title>Trace — CI Failure Analyzer</title>
+    <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main>
       <header class="app-header">
-        <div>
-          <div class="eyebrow">Jenkins Assistant</div>
-          <h1>CI/CD Error Analyzer</h1>
+        <div class="brand">
+          <svg class="brand-mark" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Trace logo">
+            <rect x="0" y="0" width="128" height="128" rx="14" fill="#ffffff" stroke="#d7dce5" stroke-width="4" />
+            <polyline points="14,68 40,68 50,40 62,90 74,52 82,68 114,68" fill="none" stroke="#F14E23" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <div class="brand-text">
+            <div class="eyebrow">Jenkins Assistant</div>
+            <h1>Trace</h1>
+          </div>
         </div>
-        <span id="count" class="count-pill">0 failures</span>
+        <div class="header-actions">
+          <button id="panelToggle" class="icon-button" type="button" title="Hide failure history" aria-label="Hide failure history">&lt;</button>
+          <span id="count" class="count-pill">0 failures</span>
+        </div>
       </header>
       <section class="layout">
         <aside>
-          <div class="panel-title">Failure History</div>
-          <div id="history" class="history-list">Loading...</div>
+          <div class="panel-title-row">
+            <span class="panel-title">Failure History</span>
+          </div>
+          <input id="search" class="search-input" type="search" placeholder="Search pipeline, branch, stage…" aria-label="Search failure history" />
+          <div class="filter-row" id="filters" role="group" aria-label="Filter by status">
+            <button class="filter-chip active" type="button" data-filter="all">All</button>
+            <button class="filter-chip" type="button" data-filter="new">New</button>
+            <button class="filter-chip" type="button" data-filter="known">Known</button>
+          </div>
+          <div id="history" class="history-list">Loading…</div>
         </aside>
-        <section id="content" class="details">Loading latest failure...</section>
+        <section id="content" class="details">Loading latest failure…</section>
       </section>
     </main>
+    <script src="utils.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

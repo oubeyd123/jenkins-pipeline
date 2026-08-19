@@ -1,17 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "CI/CD Error Analyzer",
-  "version": "0.1.0",
-  "description": "Display AI-assisted Jenkins failure analysis.",
-  "permissions": ["storage"],
-  "host_permissions": ["http://localhost:8000/*", "http://127.0.0.1:8000/*"],
+  "name": "Trace - CI Failure Analyzer",
+  "description": "Surfaces AI-generated root-cause analysis for failed Jenkins pipeline builds.",
+  "version": "2.0.0",
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon128.png",
+      "32": "icon128.png",
+      "48": "icon128.png",
+      "128": "icon128.png"
+    }
   },
+  "icons": {
+    "16": "icon128.png",
+    "48": "icon128.png",
+    "128": "icon128.png"
+  },
+  "permissions": [],
+  "host_permissions": ["http://localhost:8000/*"],
   "content_scripts": [
     {
-      "matches": ["http://localhost:8080/*", "http://127.0.0.1:8080/*"],
-      "js": ["content.js"]
+      "matches": ["*://*/job/*", "*://*/*console*"],
+      "js": ["Utils.js", "content.js"],
+      "run_at": "document_idle"
     }
   ]
 }

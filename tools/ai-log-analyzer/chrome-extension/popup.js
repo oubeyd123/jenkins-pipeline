@@ -1,77 +1,182 @@
-const API_BASE = "http://localhost:8000";
-let failures = [];
-let selectedId = null;
+const { escapeHtml, displayText, severityOf, confidencePercent } = TraceUtils;
 
-async function loadFailures() {
-  const content = document.getElementById("content");
-  try {
-    const response = await fetch(`${API_BASE}/api/failures`);
-    if (!response.ok) {
-      throw new Error(`Backend returned ${response.status}`);
-    }
-    failures = await response.json();
-    selectedId = failures[0]?.id ?? null;
-    renderHistory();
-    renderSelectedFailure();
-  } catch (error) {
-    failures = [];
-    renderHistory();
-    content.innerHTML = `<div class="empty">No analysis available: ${escapeHtml(error.message)}</div>`;
-  }
+const CONFIG = {
+  apiBase: "http://localhost:8000",
+};
+
+/** Single source of truth for popup state. Every render() reads from here. */
+const state = {
+  failures: [],
+  selectedId: null,
+  filter: "all", // "all" | "new" | "known"
+  query: "",
+  loadError: null,
+};
+
+const els = {};
+
+function cacheElements() {
+  els.history = document.getElementById("history");
+  els.content = document.getElementById("content");
+  els.count = document.getElementById("count");
+  els.search = document.getElementById("search");
+  els.filters = document.getElementById("filters");
+  els.panelToggle = document.getElementById("panelToggle");
 }
 
-function renderHistory() {
-  const history = document.getElementById("history");
-  const count = document.getElementById("count");
-  count.textContent = `${failures.length} ${failures.length === 1 ? "failure" : "failures"}`;
+/* ---------------------------------------------------------------- */
+/* Preferences (panel visibility)                                    */
+/* ---------------------------------------------------------------- */
 
-  if (!failures.length) {
-    history.innerHTML = `<div class="empty">No failed pipeline history.</div>`;
-    return;
-  }
+function initPreferences() {
+  const savedPanel = localStorage.getItem("tracePanel") || "open";
+  setPanel(savedPanel);
 
-  history.innerHTML = failures
-    .map((failure) => {
-      const analysis = failure.ai_analysis || {};
-      const isActive = failure.id === selectedId ? " active" : "";
-      const known = analysis.known_error
-        ? `<span class="history-badge">${escapeHtml(analysis.occurrence_count)} times</span>`
-        : `<span class="history-badge new">new</span>`;
-      return `
-        <button class="history-item${isActive}" type="button" data-id="${escapeHtml(failure.id)}">
-          <div class="history-main">${escapeHtml(displayText(failure.pipeline || "unknown-pipeline"))}</div>
-          <div class="history-meta">Build #${escapeHtml(failure.build_number || "n/a")} | ${escapeHtml(displayText(failure.branch || "n/a"))}</div>
-          <div class="history-meta">${escapeHtml(analysis.stage || failure.stage || "unknown")}</div>
-          <div class="history-row">
-            <span class="category-badge">${escapeHtml(analysis.category || "Generic")}</span>
-            ${known}
-          </div>
-        </button>
-      `;
-    })
-    .join("");
-
-  history.querySelectorAll(".history-item").forEach((item) => {
-    item.addEventListener("click", () => {
-      selectedId = Number(item.dataset.id);
-      renderHistory();
-      renderSelectedFailure();
-    });
+  els.panelToggle.addEventListener("click", () => {
+    const isCollapsed = document.body.classList.contains("panel-collapsed");
+    const next = isCollapsed ? "open" : "closed";
+    setPanel(next);
+    localStorage.setItem("tracePanel", next);
   });
 }
 
-function renderSelectedFailure() {
-  const content = document.getElementById("content");
-  if (!failures.length) {
-    content.innerHTML = `<div class="empty">No failure history stored yet.</div>`;
+function setPanel(panelState) {
+  const isClosed = panelState === "closed";
+  document.body.classList.toggle("panel-collapsed", isClosed);
+  els.panelToggle.textContent = isClosed ? ">" : "<";
+  els.panelToggle.title = isClosed ? "Show failure history" : "Hide failure history";
+  els.panelToggle.setAttribute("aria-label", els.panelToggle.title);
+}
+
+/* ---------------------------------------------------------------- */
+/* Data loading                                                      */
+/* ---------------------------------------------------------------- */
+
+async function loadFailures() {
+  els.content.innerHTML = `<div class="empty">Loading latest failure…</div>`;
+  els.history.innerHTML = `<div class="empty">Loading…</div>`;
+
+  try {
+    const response = await fetch(`${CONFIG.apiBase}/api/failures`);
+    if (!response.ok) {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+    state.failures = await response.json();
+    state.loadError = null;
+    state.selectedId = state.failures[0]?.id ?? null;
+  } catch (error) {
+    state.failures = [];
+    state.loadError = error.message;
+  }
+
+  render();
+}
+
+/* ---------------------------------------------------------------- */
+/* Derived data                                                      */
+/* ---------------------------------------------------------------- */
+
+function visibleFailures() {
+  const query = state.query.trim().toLowerCase();
+
+  return state.failures.filter((failure) => {
+    const analysis = failure.ai_analysis || {};
+    if (state.filter !== "all" && severityOf(analysis) !== state.filter) {
+      return false;
+    }
+    if (!query) return true;
+
+    const haystack = [
+      displayText(failure.pipeline),
+      displayText(failure.branch),
+      analysis.stage || failure.stage,
+      analysis.category,
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(query);
+  });
+}
+
+/* ---------------------------------------------------------------- */
+/* Rendering                                                          */
+/* ---------------------------------------------------------------- */
+
+function render() {
+  renderCount();
+  renderHistory();
+  renderSelectedFailure();
+}
+
+function renderCount() {
+  const total = state.failures.length;
+  els.count.textContent = `${total} ${total === 1 ? "failure" : "failures"}`;
+}
+
+function renderHistory() {
+  if (state.loadError) {
+    els.history.innerHTML = `<div class="empty">Couldn't load history: ${escapeHtml(state.loadError)}</div>`;
     return;
   }
 
-  const failure = failures.find((item) => item.id === selectedId) || failures[0];
+  const visible = visibleFailures();
+
+  if (!state.failures.length) {
+    els.history.innerHTML = `<div class="empty">No failed pipeline history.</div>`;
+    return;
+  }
+
+  if (!visible.length) {
+    els.history.innerHTML = `<div class="empty">No failures match this filter.</div>`;
+    return;
+  }
+
+  els.history.innerHTML = visible.map(historyItemHtml).join("");
+}
+
+function historyItemHtml(failure) {
+  const analysis = failure.ai_analysis || {};
+  const severity = severityOf(analysis);
+  const isActive = failure.id === state.selectedId;
+  const known =
+    severity === "known"
+      ? `<span class="history-badge">${escapeHtml(analysis.occurrence_count)}x seen</span>`
+      : `<span class="history-badge new">new</span>`;
+
+  return `
+    <button class="history-item${isActive ? " active" : ""}" type="button" data-id="${escapeHtml(failure.id)}">
+      <span class="status-ball" title="${escapeHtml(failure.status || "FAILED")}"></span>
+      <span>
+        <div class="history-main">${escapeHtml(displayText(failure.pipeline || "unknown-pipeline"))}</div>
+        <div class="history-meta">Build #${escapeHtml(failure.build_number || "n/a")} | ${escapeHtml(displayText(failure.branch || "n/a"))}</div>
+        <div class="history-meta">${escapeHtml(analysis.stage || failure.stage || "unknown")}</div>
+        <div class="history-row">
+          <span class="category-badge">${escapeHtml(analysis.category || "Generic")}</span>
+          ${known}
+        </div>
+      </span>
+    </button>
+  `;
+}
+
+function renderSelectedFailure() {
+  if (state.loadError) {
+    els.content.innerHTML = `<div class="empty">No analysis available: ${escapeHtml(state.loadError)}</div>`;
+    return;
+  }
+
+  if (!state.failures.length) {
+    els.content.innerHTML = `<div class="empty">No failure history stored yet.</div>`;
+    return;
+  }
+
+  const failure = state.failures.find((item) => item.id === state.selectedId) || state.failures[0];
   const analysis = failure.ai_analysis || {};
   const actions = analysis.suggested_actions || [];
-  const confidence = Math.round((analysis.confidence || 0) * 100);
-  content.innerHTML = `
+  const confidence = confidencePercent(analysis);
+
+  els.content.innerHTML = `
     <div class="card">
       <div class="detail-header">
         <div class="detail-title">
@@ -81,15 +186,15 @@ function renderSelectedFailure() {
         <span class="status-badge">${escapeHtml(failure.status || "FAILED")}</span>
       </div>
       <div class="meta-grid">
-        ${renderMeta("Pipeline", displayText(failure.pipeline))}
-        ${renderMeta("Branch", displayText(failure.branch || "n/a"))}
-        ${renderMeta("Stage", analysis.stage || failure.stage || "unknown")}
-        ${renderMeta("Category", analysis.category || "Generic")}
+        ${metaItemHtml("Pipeline", displayText(failure.pipeline))}
+        ${metaItemHtml("Branch", displayText(failure.branch || "n/a"))}
+        ${metaItemHtml("Stage", analysis.stage || failure.stage || "unknown")}
+        ${metaItemHtml("Category", analysis.category || "Generic")}
       </div>
       <div class="detail-body">
         <div class="summary">${escapeHtml(analysis.summary || "No summary available.")}</div>
-        ${renderKnownError(analysis)}
-        ${renderSection("Explanation", analysis.explanation || "No explanation available.")}
+        ${knownErrorHtml(analysis)}
+        ${sectionHtml("Explanation", analysis.explanation || "No explanation available.")}
         <div class="section">
           <div class="section-label">Suggested Fix</div>
           <ol class="actions-list">${actions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ol>
@@ -97,16 +202,16 @@ function renderSelectedFailure() {
         <div class="section confidence">
           <div>
             <div class="section-label">Confidence</div>
-            <div class="confidence-track"><div class="confidence-fill" style="width: ${escapeHtml(confidence)}%"></div></div>
+            <div class="confidence-track"><div class="confidence-fill" style="width: ${confidence}%"></div></div>
           </div>
-          <strong>${escapeHtml(confidence)}%</strong>
+          <strong>${confidence}%</strong>
         </div>
       </div>
     </div>
   `;
 }
 
-function renderMeta(label, value) {
+function metaItemHtml(label, value) {
   return `
     <div class="meta-item">
       <div class="meta-label">${escapeHtml(label)}</div>
@@ -115,7 +220,7 @@ function renderMeta(label, value) {
   `;
 }
 
-function renderSection(label, value) {
+function sectionHtml(label, value) {
   return `
     <div class="section">
       <div class="section-label">${escapeHtml(label)}</div>
@@ -124,34 +229,60 @@ function renderSection(label, value) {
   `;
 }
 
-function renderKnownError(analysis) {
-  if (!analysis.known_error) {
+function knownErrorHtml(analysis) {
+  if (severityOf(analysis) !== "known") {
     return `<div class="known new">New error pattern</div>`;
   }
   return `
     <div class="known">
       This error has occurred ${escapeHtml(analysis.occurrence_count)} times.
-      <div class="section-label">Previous Solution</div>
-      <div class="section-content">${escapeHtml(analysis.previous_solution || (analysis.suggested_actions || []).join("\\n"))}</div>
+      <div class="section-label" style="margin-top:6px">Previous Solution</div>
+      <div class="section-content">${escapeHtml(analysis.previous_solution || (analysis.suggested_actions || []).join("\n"))}</div>
     </div>
   `;
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+/* ---------------------------------------------------------------- */
+/* Events (delegated — bound once, not re-bound on every render)     */
+/* ---------------------------------------------------------------- */
+
+function bindEvents() {
+  els.history.addEventListener("click", (event) => {
+    const item = event.target.closest(".history-item");
+    if (!item) return;
+    state.selectedId = Number(item.dataset.id);
+    render();
+  });
+
+  els.filters.addEventListener("click", (event) => {
+    const chip = event.target.closest(".filter-chip");
+    if (!chip) return;
+    state.filter = chip.dataset.filter;
+    [...els.filters.querySelectorAll(".filter-chip")].forEach((c) => c.classList.toggle("active", c === chip));
+    renderCount();
+    renderHistory();
+  });
+
+  let searchDebounce;
+  els.search.addEventListener("input", (event) => {
+    clearTimeout(searchDebounce);
+    const value = event.target.value;
+    searchDebounce = setTimeout(() => {
+      state.query = value;
+      renderHistory();
+    }, 120);
+  });
 }
 
-function displayText(value) {
-  try {
-    return decodeURIComponent(String(value ?? ""));
-  } catch {
-    return String(value ?? "");
-  }
+/* ---------------------------------------------------------------- */
+/* Init                                                               */
+/* ---------------------------------------------------------------- */
+
+function init() {
+  cacheElements();
+  initPreferences();
+  bindEvents();
+  loadFailures();
 }
 
-loadFailures();
+init();
