@@ -19,14 +19,15 @@
           </div>
         </div>
         <div class="header-actions">
-          <button id="panelToggle" class="icon-button" type="button" title="Hide failure history" aria-label="Hide failure history">&lt;</button>
           <span id="count" class="count-pill">0 failures</span>
         </div>
       </header>
+      <button id="panelOpenRail" class="panel-rail-button" type="button" title="Show failure history" aria-label="Show failure history">&gt;</button>
       <section class="layout">
         <aside>
           <div class="panel-title-row">
             <span class="panel-title">Failure History</span>
+            <button id="panelToggle" class="panel-toggle-button" type="button" title="Hide failure history" aria-label="Hide failure history">&lt;</button>
           </div>
           <input id="search" class="search-input" type="search" placeholder="Search pipeline, branch, stage…" aria-label="Search failure history" />
           <div class="filter-row" id="filters" role="group" aria-label="Filter by status">

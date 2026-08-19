@@ -17,6 +17,15 @@ STAGE_PATTERNS = [
     re.compile(r"Stage ['\"]([^'\"]+)['\"]", re.I),
 ]
 
+MESSAGE_PATTERNS = [
+    re.compile(r"\[ERROR\].*Could not (collect dependencies|resolve|transfer|read artifact descriptor)", re.I),
+    re.compile(r"\[ERROR\].*", re.I),
+    re.compile(r"BUILD FAILURE", re.I),
+    re.compile(r"parser error|Opening and ending tag mismatch", re.I),
+    re.compile(r"fatal: unable to access|error fetching remote repo", re.I),
+    re.compile(r"script returned exit code|Exception|Caused by:|failed", re.I),
+]
+
 ERROR_PATTERNS = [
     (re.compile(r"Could not read Jenkins console log|consoleText fallback .*failed|consoleText fallback did not return", re.I), "Analyzer / Jenkins"),
     (re.compile(r"parser error|Opening and ending tag mismatch|Premature end of data|xmlParse|xmllint", re.I), "XML Validation"),
@@ -81,11 +90,22 @@ def stage_by_line(lines: list[str]) -> list[str]:
     for line in lines:
         for pattern in STAGE_PATTERNS:
             match = pattern.search(line)
-            if match:
+            if match and is_stage_name(match.group(1).strip()):
                 current_stage = match.group(1).strip()
                 break
         stages.append(current_stage)
     return stages
+
+
+def is_stage_name(value: str) -> bool:
+    if not value or value == "unknown":
+        return False
+    normalized = value.replace("\\", "/")
+    if normalized.endswith(".groovy") or normalized.endswith(".js") or normalized.endswith(".py"):
+        return False
+    if "/" in normalized and not re.search(r"\b(Validate|Build|Scan|Deploy|Smoke|Release|Security|Package)\b", value, re.I):
+        return False
+    return True
 
 
 def matching_lines(lines: list[str]) -> Iterable[tuple[int, str]]:
@@ -139,6 +159,14 @@ def extract_errors(log_text: str, before: int = 15, after: int = 15, max_errors:
             continue
         seen.add(digest)
         first_message = next(
+            (
+                line
+                for pattern in MESSAGE_PATTERNS
+                for line in context_lines
+                if pattern.search(line)
+            ),
+            "",
+        ) or next(
             (
                 line
                 for line in context_lines

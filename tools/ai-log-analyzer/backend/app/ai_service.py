@@ -80,6 +80,16 @@ def analyze(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def analyze_error(payload: dict[str, Any], error: dict[str, Any], index: int = 0) -> dict[str, Any]:
+    scoped_payload = dict(payload)
+    scoped_payload["errors"] = [error]
+    result = analyze(scoped_payload)
+    result["error_index"] = index
+    result["line_start"] = error.get("line_start")
+    result["line_end"] = error.get("line_end")
+    return result
+
+
 def suggested_actions(category: str, message: str) -> list[str]:
     if category == "XML Validation":
         file_line = extract_file_line(message)
@@ -113,6 +123,15 @@ def explain(category: str, message: str) -> str:
                 f"but closes with </{mismatch.group(2)}>."
             )
         return "The XML validation step failed because one XML file is malformed."
+    if category in {"Dependency / Nexus", "Maven"}:
+        artifact = extract_maven_artifact(message)
+        if "could not transfer artifact" in message.lower():
+            if artifact:
+                return f"Maven could not download {artifact} from the configured repository, so the build stopped during dependency resolution."
+            return "Maven could not download a required artifact from the configured repository, so the build stopped during dependency resolution."
+        if "could not collect dependencies" in message.lower() or "failed to read artifact descriptor" in message.lower():
+            return "Maven failed while resolving project dependencies. Check the following artifact and repository lines in the build log."
+        return "The Maven build failed while resolving dependencies from the configured repositories."
     return "The analyzer selected the earliest high-signal error block and classified it by tool-specific patterns."
 
 
@@ -140,3 +159,8 @@ def extract_file_line(message: str) -> str:
     if not match:
         return ""
     return f"{match.group(1)} at line {match.group(2)}"
+
+
+def extract_maven_artifact(message: str) -> str:
+    match = re.search(r"artifact\s+([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+){0,2})", message)
+    return match.group(1) if match else ""

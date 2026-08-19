@@ -43,6 +43,36 @@ Caused by: Connection refused
     assert errors[0]["type"] == "Maven"
 
 
+def test_dependency_download_info_does_not_hide_maven_error():
+    log = """
+[Pipeline] { (Build CAR: order-api-math)
+[INFO] Downloading from allow-local-nexus-http: http://host.docker.internal:8081/repository/wso2-mi-libs-releases/com/example/calculator-lib/1.0.1/calculator-lib-1.0.1.pom
+[INFO] BUILD FAILURE
+[ERROR] Failed to execute goal on project math: Could not collect dependencies for project com.microintegrator.projects:math:pom:1.0.0
+[ERROR] Failed to read artifact descriptor for com.example:calculator-lib:jar:1.0.1
+[ERROR] Caused by: The following artifacts could not be resolved: com.example:calculator-lib:pom:1.0.1 (absent): Could not transfer artifact com.example:calculator-lib:pom:1.0.1 from/to allow-local-nexus-http
+"""
+
+    errors = extract_errors(log)
+
+    assert errors
+    assert errors[0]["message"].startswith("[ERROR]")
+    assert "Could not collect dependencies" in errors[0]["message"]
+    assert errors[0]["stage"] == "Build CAR: order-api-math"
+
+
+def test_groovy_file_path_is_not_used_as_stage():
+    log = """
+Stage 'jenkins/lib/miRuntimeLibs.groovy'
+[ERROR] Failed to execute goal on project math: Could not collect dependencies
+"""
+
+    errors = extract_errors(log)
+
+    assert errors
+    assert errors[0]["stage"] == "unknown"
+
+
 def test_xml_command_noise_does_not_hide_parser_error():
     log = """
 [Pipeline] { (Validate: greeding-api-test)

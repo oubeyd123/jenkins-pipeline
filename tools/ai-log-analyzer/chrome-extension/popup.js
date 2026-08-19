@@ -8,6 +8,7 @@ const CONFIG = {
 const state = {
   failures: [],
   selectedId: null,
+  selectedErrorIndex: 0,
   filter: "all", // "all" | "new" | "known"
   query: "",
   loadError: null,
@@ -22,6 +23,7 @@ function cacheElements() {
   els.search = document.getElementById("search");
   els.filters = document.getElementById("filters");
   els.panelToggle = document.getElementById("panelToggle");
+  els.panelOpenRail = document.getElementById("panelOpenRail");
 }
 
 /* ---------------------------------------------------------------- */
@@ -38,14 +40,21 @@ function initPreferences() {
     setPanel(next);
     localStorage.setItem("tracePanel", next);
   });
+
+  els.panelOpenRail.addEventListener("click", () => {
+    setPanel("open");
+    localStorage.setItem("tracePanel", "open");
+  });
 }
 
 function setPanel(panelState) {
   const isClosed = panelState === "closed";
   document.body.classList.toggle("panel-collapsed", isClosed);
-  els.panelToggle.textContent = isClosed ? ">" : "<";
-  els.panelToggle.title = isClosed ? "Show failure history" : "Hide failure history";
+  els.panelToggle.textContent = "<";
+  els.panelToggle.title = "Hide failure history";
   els.panelToggle.setAttribute("aria-label", els.panelToggle.title);
+  els.panelOpenRail.title = "Show failure history";
+  els.panelOpenRail.setAttribute("aria-label", els.panelOpenRail.title);
 }
 
 /* ---------------------------------------------------------------- */
@@ -64,6 +73,7 @@ async function loadFailures() {
     state.failures = await response.json();
     state.loadError = null;
     state.selectedId = state.failures[0]?.id ?? null;
+    state.selectedErrorIndex = 0;
   } catch (error) {
     state.failures = [];
     state.loadError = error.message;
@@ -172,7 +182,9 @@ function renderSelectedFailure() {
   }
 
   const failure = state.failures.find((item) => item.id === state.selectedId) || state.failures[0];
-  const analysis = failure.ai_analysis || {};
+  const primaryAnalysis = failure.ai_analysis || {};
+  const allAnalyses = primaryAnalysis.error_analyses?.length ? primaryAnalysis.error_analyses : [primaryAnalysis];
+  const analysis = allAnalyses[state.selectedErrorIndex] || allAnalyses[0] || primaryAnalysis;
   const actions = analysis.suggested_actions || [];
   const confidence = confidencePercent(analysis);
 
@@ -192,6 +204,7 @@ function renderSelectedFailure() {
         ${metaItemHtml("Category", analysis.category || "Generic")}
       </div>
       <div class="detail-body">
+        ${errorSelectorHtml(allAnalyses)}
         <div class="summary">${escapeHtml(analysis.summary || "No summary available.")}</div>
         ${knownErrorHtml(analysis)}
         ${sectionHtml("Explanation", analysis.explanation || "No explanation available.")}
@@ -208,6 +221,34 @@ function renderSelectedFailure() {
         </div>
       </div>
     </div>
+  `;
+}
+
+function errorSelectorHtml(analyses) {
+  if (!analyses || analyses.length <= 1) {
+    return "";
+  }
+
+  return `
+    <div class="error-switcher">
+      <div class="section-label">Errors in this build</div>
+      <div class="error-list">
+        ${analyses.map(errorChoiceHtml).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function errorChoiceHtml(analysis) {
+  const index = Number(analysis.error_index ?? 0);
+  const isActive = index === state.selectedErrorIndex;
+  const label = analysis.stage || `Error ${index + 1}`;
+  const line = analysis.category || "Generic";
+  return `
+    <button class="error-choice${isActive ? " active" : ""}" type="button" data-error-index="${escapeHtml(index)}">
+      <span class="error-choice-title">${escapeHtml(label)}</span>
+      <span class="error-choice-meta">${escapeHtml(line)}</span>
+    </button>
   `;
 }
 
@@ -251,7 +292,15 @@ function bindEvents() {
     const item = event.target.closest(".history-item");
     if (!item) return;
     state.selectedId = Number(item.dataset.id);
+    state.selectedErrorIndex = 0;
     render();
+  });
+
+  els.content.addEventListener("click", (event) => {
+    const item = event.target.closest(".error-choice");
+    if (!item) return;
+    state.selectedErrorIndex = Number(item.dataset.errorIndex || 0);
+    renderSelectedFailure();
   });
 
   els.filters.addEventListener("click", (event) => {
